@@ -109,6 +109,12 @@
  */
 
 /**
+ * @typedef ScaleValueUsesTypeData
+ * @property {number} value           Number of uses.
+ * @property {string} per             Usage refresh period.
+ */
+
+/**
  * Information on how a scale value of this type is configured.
  *
  * @typedef ScaleValueTypeMetadata
