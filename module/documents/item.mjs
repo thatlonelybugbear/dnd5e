@@ -797,9 +797,7 @@ export default class Item5e extends SystemDocumentMixin(Item) {
         || areKeysPressed(event, "skipDialogAdvantage")
         || areKeysPressed(event, "skipDialogDisadvantage");
       if ( (activities.length > 1) && !skipDialog ) {
-        const result = await ActivityChoiceDialog.create(this);
-        activity = result.activity;
-        event = result.event;
+        ({ activity, event } = await ActivityChoiceDialog.create(this) ?? {});
       }
       if ( !activity ) return;
       if ( config.legacy !== false ) {
