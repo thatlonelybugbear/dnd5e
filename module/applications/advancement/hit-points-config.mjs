@@ -1,23 +1,34 @@
-import AdvancementConfig from "./advancement-config.mjs";
+import AdvancementConfig from "./advancement-config-v2.mjs";
 
 /**
  * Configuration application for hit points.
  */
 export default class HitPointsConfig extends AdvancementConfig {
-
-  /** @inheritDoc */
-  static get defaultOptions() {
-    return foundry.utils.mergeObject(super.defaultOptions, {
-      template: "systems/dnd5e/templates/advancement/hit-points-config.hbs"
-    });
-  }
+  /** @override */
+  static DEFAULT_OPTIONS = {
+    classes: ["hit-points"]
+  };
 
   /* -------------------------------------------- */
 
+  /** @override */
+  static PARTS = {
+    config: {
+      template: "systems/dnd5e/templates/advancement/advancement-controls-section.hbs"
+    },
+    hitPoints: {
+      template: "systems/dnd5e/templates/advancement/hit-points-config.hbs"
+    }
+  };
+
+  /* -------------------------------------------- */
+  /*  Rendering                                   */
+  /* -------------------------------------------- */
+
   /** @inheritDoc */
-  getData() {
-    return foundry.utils.mergeObject(super.getData(), {
-      hitDie: this.advancement.hitDie
-    });
+  async _prepareContext(options) {
+    const context = await super._prepareContext(options);
+    context.hitDie = this.advancement.hitDie;
+    return context;
   }
 }
