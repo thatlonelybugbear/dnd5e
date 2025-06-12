@@ -57,8 +57,10 @@ export default class BastionAttackMessageData extends ChatMessageDataModel {
   async _prepareContext() {
     const context = {};
     const plurals = new Intl.PluralRules(game.i18n.lang);
-    const key = this.undefended ? "Undefended" : this.deaths ? `Deaths.${plurals.select(this.deaths)}` : "NoDeaths";
-    context.description = _loc(`DND5E.Bastion.Attack.Result.${key}`, { deaths: this.deaths });
+    let key = this.undefended ? "Undefended" : this.deaths ? null : "NoDeaths";
+    if ( key ) key = `DND5E.Bastion.Attack.Result.${key}`;
+    else key = getPluralLocalizationKey(deaths, pr => `DND5E.Bastion.Attack.Result.${pr}`);
+    context.description = _loc(key, { deaths: this.deaths });
     context.roll = await this.parent.rolls[0].render();
     context.buttons = [];
     if ( !this.resolved && (this.deaths || this.undefended) ) {

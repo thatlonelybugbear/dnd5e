@@ -1,4 +1,6 @@
-import { defaultUnits, formatLength, formatNumber, getPluralRules, prepareFormulaValue } from "../../utils.mjs";
+import {
+  defaultUnits, formatLength, formatNumber, getPluralLocalizationKey, prepareFormulaValue
+} from "../../utils.mjs";
 import FormulaField from "../fields/formula-field.mjs";
 
 const { BooleanField, SchemaField, StringField } = foundry.data.fields;
@@ -68,8 +70,6 @@ export default class TargetField extends SchemaField {
       this.target.template.height = null;
     }
 
-    const pr = getPluralRules();
-
     // Generate the template labels
     const templateConfig = CONFIG.DND5E.areaTargetTypes[this.target.template.type];
     this.target.template.labels = {};
@@ -80,7 +80,8 @@ export default class TargetField extends SchemaField {
         parts.push(formatLength(this.target.template.size, this.target.template.units));
       }
       this.target.template.labels.statblock = this.target.template.label = _loc(
-        `${templateConfig.counted}.${pr.select(this.target.template.count || 1)}`, { number: parts.filterJoin(" ") }
+        getPluralLocalizationKey(this.target.template.count || 1, pr => `${templateConfig.counted}.${pr}`),
+        { number: parts.filterJoin(" ") }
       ).trim().capitalize();
 
       const sizeUnit = CONFIG.DND5E.movementUnits[this.target.template.units]?.template ?? "";
@@ -97,7 +98,7 @@ export default class TargetField extends SchemaField {
         ));
 
       this.target.template.labels.description = _loc(
-        `${templateConfig.counted}.${pr.select(this.target.template.count || 1)}Sized`,
+        getPluralLocalizationKey(this.target.template.count || 1, pr => `${templateConfig.counted}.${pr}Sized`),
         {
           number: formatNumber(this.target.template.count, { words: true }),
           sizes: this.target.template.labels.size
@@ -109,24 +110,30 @@ export default class TargetField extends SchemaField {
 
     // Generate the affects labels
     const affectsConfig = CONFIG.DND5E.individualTargetTypes[this.target.affects.type];
+    const affectsDescriptionBase = (this.target.affects.special ? "DND5E.TARGET.Type.Special.Counted"
+      : affectsConfig?.counted) ?? "DND5E.TARGET.Type.Target.Counted";
     this.target.affects.labels = {
       description: _loc(
-        `${this.target.affects.special ? "DND5E.TARGET.Type.Special.Counted"
-          : affectsConfig?.counted ?? "DND5E.TARGET.Type.Target.Counted"}.${this.target.affects.count
-          ? pr.select(this.target.affects.count) : this.target.template.type ? "each" : "any"}`,
+        this.target.affects.count
+          ? getPluralLocalizationKey(this.target.affects.count, pr => `${affectsDescriptionBase}.${pr}`)
+          : `${affectsDescriptionBase}.${this.target.template.type ? "each" : "any"}`,
         {
           number: formatNumber(this.target.affects.count, { words: true }),
           special: this.target.affects.special
         }
       ),
       sheet: affectsConfig?.counted ? _loc(
-        `${affectsConfig.counted}.${this.target.affects.count ? pr.select(this.target.affects.count) : "other"}`, {
+        this.target.affects.count
+          ? getPluralLocalizationKey(this.target.affects.count, pr => `${affectsConfig.counted}.${pr}`)
+          : `${affectsConfig.counted}.other`,
+        {
           number: this.target.affects.count ? formatNumber(this.target.affects.count)
             : _loc(`DND5E.TARGET.Count.${this.target.template.type ? "Every" : "Any"}`)
         }
       ).trim().capitalize() : (affectsConfig?.label ?? ""),
       statblock: _loc(
-        `${affectsConfig?.counted ?? "DND5E.TARGET.Type.Target.Counted"}.${pr.select(this.target.affects.count || 1)}`,
+        getPluralLocalizationKey(this.target.affects.count || 1, pr =>
+          `${affectsConfig?.counted ?? "DND5E.TARGET.Type.Target.Counted"}.${pr}`),
         { number: formatNumber(this.target.affects.count || 1, { words: true }) }
       )
     };
