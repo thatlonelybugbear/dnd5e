@@ -279,8 +279,8 @@ export default class AttributesFields {
       weight += convertWeight(
         numCoins / currencyPerWeight,
         config.baseUnits.default[unitSystem],
-        baseUnits[unitSystem]
-      );
+        { to: baseUnits[unitSystem], legacy: false }
+      ).value;
     }
 
     // Determine the Encumbrance size class
@@ -434,7 +434,7 @@ export default class AttributesFields {
       && !this.parent.flags.dnd5e?.ignoreArmorSpeedReduction && this.isCreature ) {
       reduction += CONFIG.DND5E.armorSpeedReduction;
     }
-    reduction = convertLength(reduction, CONFIG.DND5E.defaultUnits.length.imperial, units);
+    reduction = convertLength(reduction, CONFIG.DND5E.defaultUnits.length.imperial, { to: units, legacy: false }).value;
     const bonus = simplifyBonus(this.attributes.movement.bonus, rollData);
     this.attributes.movement.max = 0;
     for ( const type of Object.keys(CONFIG.DND5E.movementTypes) ) {
