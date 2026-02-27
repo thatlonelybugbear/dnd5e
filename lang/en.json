@@ -4640,6 +4640,9 @@
         "otherSized": "{number} {sizes} Radii"
       }
     },
+    "Ring": {
+      "Label": "Wall (ring)"
+    },
     "Self": {
       "Label": "Self"
     },
@@ -4692,7 +4695,7 @@
       }
     },
     "Wall": {
-      "Label": "Wall",
+      "Label": "Wall (straight)",
       "Counted": {
         "one": "{number} wall",
         "other": "{number} walls",
