@@ -2836,7 +2836,7 @@ DND5E.areaTargetTypes = {
   radius: {
     label: "DND5E.TARGET.Type.Emanation.Label",
     counted: "DND5E.TARGET.Type.Emanation.Counted",
-    template: "circle",
+    template: "emanation",
     standard: true
   },
   sphere: {
