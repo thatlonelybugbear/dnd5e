@@ -203,7 +203,7 @@ export default function ActivityMixin(Base) {
             dnd5e: this.messageFlags
           },
           system: {
-            effects: this.applicableEffects?.map(e => `.ActiveEffect.${e.id}`)
+            effects: this.applicableEffects?.map(e => e.relativeUUID)
           }
         },
         hasConsumption: usageConfig.hasConsumption
@@ -717,7 +717,7 @@ export default function ActivityMixin(Base) {
      */
     _finalizeMessageConfig(usageConfig, messageConfig, results) {
       messageConfig.data.rolls = (messageConfig.data.rolls ?? []).concat(results.updates.rolls);
-      const effects = this.applicableEffects?.map(e => `.ActiveEffect.${e.id}`);
+      const effects = this.applicableEffects?.map(e => e.relativeUUID);
       if ( effects ) foundry.utils.setProperty(messageConfig.data, "system.effects", effects);
     }
 

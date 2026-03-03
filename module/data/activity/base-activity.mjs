@@ -19,7 +19,7 @@ const {
 /**
  * @import { DamageRollConfiguration, DamageRollProcessConfiguration } from "../../dice/_types.mjs";
  * @import { ActivityRollData } from "../../documents/_types.mjs";
- * @import { ActivityData } from "./_types.mjs";
+ * @import { ActivityData, EffectApplicationData } from "./_types.mjs";
  */
 
 /**
@@ -129,14 +129,14 @@ export default class BaseActivityData extends foundry.abstract.DataModel {
   /* -------------------------------------------- */
 
   /**
-   * Effects that can be applied from this activity.
-   * @type {ActiveEffect5e[]|null}
+   * Effect profiles that can be applied from this activity.
+   * @type {EffectApplicationData[]|null}
    */
   get applicableEffects() {
     const level = this.relevantLevel;
     return this.effects?.filter(e =>
-      e.effect && ((e.level?.min ?? -Infinity) <= level) && (level <= (e.level?.max ?? Infinity))
-    ).map(e => e.effect) ?? null;
+      ((e.level?.min ?? -Infinity) <= level) && (level <= (e.level?.max ?? Infinity))
+    ) ?? null;
   }
 
   /* -------------------------------------------- */
@@ -741,6 +741,19 @@ export default class BaseActivityData extends foundry.abstract.DataModel {
       .concat(config.rolls ?? []);
 
     return rollConfig;
+  }
+
+  /* -------------------------------------------- */
+
+  /**
+   * Effects that can be applied from this activity.
+   * @type {Promise<ActiveEffect5e[]>|null}
+   */
+  getApplicableEffects() {
+    const applicableEffects = this.applicableEffects;
+    return applicableEffects
+      ? Promise.all(this.applicableEffects.map(e => e.getEffect())).then(e => e.filter(_ => _))
+      : null;
   }
 
   /* -------------------------------------------- */
