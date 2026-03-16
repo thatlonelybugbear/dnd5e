@@ -301,26 +301,24 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
 
   /** @inheritDoc */
   prepareData() {
-    if ( this.system.modelProvider !== dnd5e ) return super.prepareData();
-    this._clearCachedValues();
-    this._preparationWarnings = [];
-    this.labels = {};
     super.prepareData();
-    this.items.forEach(item => item.prepareFinalAttributes());
-    this._prepareSpellcasting();
+    if ( this.system.modelProvider === dnd5e ) {
+      this.items.forEach(item => item.prepareFinalAttributes());
+      this._prepareSpellcasting();
+    }
   }
 
   /* --------------------------------------------- */
 
-  /**
-   * Clear cached class collections.
-   * @internal
-   */
+  /** @inheritDoc */
   _clearCachedValues() {
+    super._clearCachedValues();
     this._lazy = {};
     this._preferredArtwork = null;
+    this._preparationWarnings = [];
     this.identifiedItems = new IdentifiedItemsMap();
     this.sourcedItems = new SourcedItemsMap();
+    this.labels = {};
   }
 
   /* --------------------------------------------- */

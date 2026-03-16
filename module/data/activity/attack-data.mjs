@@ -257,7 +257,7 @@ export default class BaseAttackActivityData extends BaseActivityData {
    * @returns {{ data: object, parts: string[] }}
    */
   getAttackData({ ammunition, attackMode, situational }={}) {
-    const rollData = this.getRollData();
+    const rollData = this.getRollData({ roll: { attackMode } });
     if ( this.attack.flat ) return CONFIG.Dice.BasicRoll.constructParts({ toHit: this.attack.bonus }, rollData);
 
     const weapon = this.item.system;
@@ -269,6 +269,15 @@ export default class BaseAttackActivityData extends BaseActivityData {
       weaponMagic: weapon.magicAvailable ? weapon.magicalBonus : null,
       ammoMagic: ammo?.magicAvailable ? ammo.magicalBonus : null,
       actorBonus: this.actor?.system.bonuses?.[this.getActionType(attackMode)]?.attack,
+      ruleBonus: [
+        // TODO: Move this into shared method
+        ...(this.actor?.appliedRules.get("attack:bonus") ?? []),
+        ...(this.item?.appliedRules.get("attack:bonus") ?? [])
+      ].filter(change => {
+        if ( change.effect.system.conditions?.recheck(rollData) === false ) return false;
+        if ( change.conditions?.recheck(rollData) === false ) return false;
+        return true;
+      }).map(c => c.value).join(" + "),
       situational
     }, rollData);
 

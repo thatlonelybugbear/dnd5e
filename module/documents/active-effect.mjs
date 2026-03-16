@@ -329,6 +329,17 @@ export default class ActiveEffect5e extends DependentDocumentMixin(ActiveEffect)
   /* -------------------------------------------- */
 
   /**
+   * Apply one of the rule active effect change types.
+   * @type {ActiveEffectChangeHandler}
+   */
+  static _applyChangeRule(targetDoc, change, options) {
+    if ( !targetDoc.appliedRules ) return;
+    targetDoc.appliedRules.set(change);
+  }
+
+  /* -------------------------------------------- */
+
+  /**
    * Modify the provided change according to a shim an emit a warning if required.
    * @param {EffectChangeData} change  The change being applied.
    * @returns {EffectChangeData}
@@ -413,11 +424,14 @@ export default class ActiveEffect5e extends DependentDocumentMixin(ActiveEffect)
     // TODO: Adapt when core implements, if it does
     if ( change.phase !== phase ) return false;
 
-    const targetDoc = this.applicableType === "Actor" ? this.actor : this.applicableType === "Item" ? this.item : null;
-    const conditionData = targetDoc?.getRollData?.();
-    if ( conditionData ) {
-      if ( change.effect.system.conditions?.check(conditionData) === false ) return false;
-      if ( change.conditions?.check(conditionData) === false ) return false;
+    if ( !CONFIG.ActiveEffect.changeTypes[change.type]?.skipConditions ) {
+      const targetDoc = this.applicableType === "Actor" ? this.actor
+        : this.applicableType === "Item" ? this.item : null;
+      const conditionData = targetDoc?.getRollData?.();
+      if ( conditionData ) {
+        if ( change.effect.system.conditions?.check(conditionData) === false ) return false;
+        if ( change.conditions?.check(conditionData) === false ) return false;
+      }
     }
 
     change.applied = true;

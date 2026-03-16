@@ -4,6 +4,7 @@ import { ConsumptionTargetData } from "./data/activity/fields/consumption-target
 import { CalendarGreyhawk, CALENDAR_OF_GREYHAWK } from "./data/calendar/calendar-of-greyhawk.mjs";
 import { CalendarHarptos, CALENDAR_OF_HARPTOS } from "./data/calendar/calendar-of-harptos.mjs";
 import { CalendarKhorvaire, CALENDAR_OF_KHORVAIRE } from "./data/calendar/calendar-of-khorvaire.mjs";
+import ActiveEffect5e from "./documents/active-effect.mjs";
 import * as activities from "./documents/activity/_module.mjs";
 import Actor5e from "./documents/actor/actor.mjs";
 import * as advancement from "./documents/advancement/_module.mjs";
@@ -3889,6 +3890,21 @@ DND5E.bloodied = {
   img: "systems/dnd5e/icons/svg/statuses/bloodied.svg",
   threshold: .5
 };
+
+/* -------------------------------------------- */
+
+/**
+ * System provided active effect change types.
+ * @enum {ActiveEffectChangeTypeConfig & { [skipConditions]: boolean }}
+ */
+DND5E.activeEffectChangeTypes = Object.freeze({
+  "dnd5e.bonus": {
+    label: "bonus",
+    defaultPriority: 100,
+    handler: ActiveEffect5e._applyChangeRule,
+    skipConditions: true
+  }
+});
 
 /* -------------------------------------------- */
 /*  Languages                                   */
