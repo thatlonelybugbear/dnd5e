@@ -4850,6 +4850,8 @@ Object.defineProperty(DND5E, "enrichmentLookup", {
       addFullKeys("skills");
       addFullKeys("spellSchools");
       Object.entries(DND5E.vehicleTypes).forEach(([k, label]) => _enrichmentLookup.tools[k] = { label });
+
+      _enrichmentLookup.abilities.spellcasting = { label: _loc("DND5E.Spellcasting") };
     }
     return _enrichmentLookup;
   },
