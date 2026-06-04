@@ -4,9 +4,9 @@
  * @import { ConsumptionTargetData, EffectApplicationData } from "./fields/_types.mjs";
  */
 
- /* -------------------------------------------- */
- /*  Activities                                  */
- /* -------------------------------------------- */
+/* -------------------------------------------- */
+/*  Activities                                  */
+/* -------------------------------------------- */
 
 /**
  * @typedef ActivityData
