@@ -3,7 +3,8 @@ import AttackRollConfigurationDialog from "./applications/dice/attack-configurat
 import simplifyRollFormula from "./dice/simplify-roll-formula.mjs";
 import * as Trait from "./documents/actor/trait.mjs";
 import { rollItem } from "./documents/macro.mjs";
-import { formatNumber, getSceneTargets, getTargetDescriptors, loadingTooltip, log, simplifyBonus } from "./utils.mjs";
+import TargetsField from "./data/chat-message/fields/targets-field.mjs";
+import { formatNumber, getSceneTargets, loadingTooltip, log, simplifyBonus } from "./utils.mjs";
 
 const slugify = value => value?.slugify().replaceAll("-", "").replaceAll("(", "").replaceAll(")", "");
 const logWarning = (msg, options) =>
@@ -306,7 +307,7 @@ async function rollAttack(config, event) {
     if ( activity ) return activity.rollAttack({ attackMode, event });
   }
 
-  const targets = getTargetDescriptors();
+  const targets = TargetsField.getDescriptors();
   const rollConfig = {
     attackMode, event,
     hookNames: ["attack", "d20Test"],
@@ -322,14 +323,10 @@ async function rollAttack(config, event) {
 
   const messageConfig = {
     data: {
-      flags: {
-        dnd5e: {
-          messageType: "roll",
-          roll: { type: "attack" }
-        }
-      },
       flavor: _loc("DND5E.AttackRoll"),
-      speaker: ChatMessage.implementation.getSpeaker()
+      speaker: ChatMessage.implementation.getSpeaker(),
+      system: { mode: attackMode ?? null },
+      type: "attack"
     }
   };
 
@@ -663,20 +660,22 @@ function createCheckRequestButtons(dataset) {
   const skills = foundry.utils.getType(dataset.skill) === "string" ? dataset.skill.split("|") : dataset.skill ?? [];
   const tools = foundry.utils.getType(dataset.tool) === "string" ? dataset.tool.split("|") : dataset.tool ?? [];
   if ( ((skills.length + tools.length) <= 1) && !dataset.usingTool ) {
-    if ( !dataset.ability ) {
-      if ( skills.length === 1 ) dataset.ability = CONFIG.DND5E.skills[skills[0]]?.ability;
-      else if ( tools.length === 1 ) dataset.ability = CONFIG.DND5E.tools[tools[0]]?.ability;
-    }
-    return [createRequestButton(dataset)];
+    const [skill] = skills;
+    const [tool] = tools;
+    return [createPromptButton({
+      ...dataset, skill, tool,
+      ability: dataset.ability || (skill ? CONFIG.DND5E.skills[skill]?.ability : CONFIG.DND5E.tools[tool]?.ability),
+      type: skill ? "skill" : tool ? "tool" : "check"
+    })];
   }
   const baseDataset = { ...dataset };
   delete baseDataset.skill;
   delete baseDataset.tool;
   return [
-    ...skills.map(skill => createRequestButton({
+    ...skills.map(skill => createPromptButton({
       ability: CONFIG.DND5E.skills[skill].ability, ...baseDataset, format: "short", skill, type: "skill"
     })),
-    ...dataset.usingTool ? [] : tools.map(tool => createRequestButton({
+    ...dataset.usingTool ? [] : tools.map(tool => createPromptButton({
       ability: CONFIG.DND5E.tools[tool]?.ability, ...baseDataset, format: "short", tool, type: "tool"
     }))
   ];
@@ -843,7 +842,7 @@ async function handleSaveCommand(config) {
 function createSaveRequestButtons(dataset) {
   const abilities = foundry.utils.getType(dataset.ability) === "string" ? dataset.ability.split("|")
     : dataset.ability ?? [];
-  return abilities.map(ability => createRequestButton({ ...dataset, format: "long", ability }));
+  return abilities.map(ability => createPromptButton({ ...dataset, format: "long", ability }));
 }
 
 /* -------------------------------------------- */
@@ -882,7 +881,7 @@ async function rollCheckSave(config, event) {
   if ( ability in CONFIG.DND5E.abilities ) options.ability = ability;
   if ( dc ) options.target = Number(dc);
 
-  const actors = getSceneTargets().map(t => t.actor);
+  const actors = config.actor ? [config.actor] : getSceneTargets().map(t => t.actor);
   if ( !actors.length && game.user.character ) actors.push(game.user.character);
   if ( !actors.length ) {
     ui.notifications.warn("EDITOR.DND5E.Inline.Warning.NoActor");
@@ -1184,15 +1183,10 @@ async function rollDamage(config, event) {
   const messageConfig = {
     create: true,
     data: {
-      flags: {
-        dnd5e: {
-          messageType: "roll",
-          roll: { type: rollType },
-          targets: getTargetDescriptors()
-        }
-      },
       flavor: _loc(`DND5E.${rollType === "healing" ? "Healing" : "Damage"}Roll`),
-      speaker: ChatMessage.implementation.getSpeaker()
+      speaker: ChatMessage.implementation.getSpeaker(),
+      system: { targets: TargetsField.getDescriptors() },
+      type: rollType === "healing" ? "healing" : "damage"
     }
   };
 
@@ -1429,7 +1423,7 @@ export async function enrichItem(config, label, options) {
     _addDataset(span, dataset);
     if ( uuid ) {
       span.dataset.tooltipHtml = loadingTooltip({ uuid });
-      span.dataset.tooltipClass = "dnd5e2 dnd5e-tooltip item-tooltip themed theme-light";
+      span.dataset.tooltipClass = "dnd5e2 dnd5e-tooltip item-tooltip";
       span.dataset.tooltipDirection = "LEFT";
     }
     span.append(createRollLink(label));
@@ -1626,6 +1620,9 @@ export function createRollLabel(config) {
       if ( showDC ) label = _loc("EDITOR.DND5E.Inline.DC", { dc: config.dc, check: label });
       label = _loc(`EDITOR.DND5E.Inline.Save${longSuffix}`, { save: label });
       break;
+    case "endConcentration":
+      label = _loc("DND5E.CONCENTRATION.Action.Break");
+      break;
     default:
       return "";
   }
@@ -1642,6 +1639,9 @@ export function createRollLabel(config) {
       case "concentration":
       case "save":
         label = `<i class="fas fa-shield-heart"></i>${label}`;
+        break;
+      case "endConcentration":
+        label = `<i class="fa-solid fa-ban" inert></i>${label}`;
         break;
     }
   }
@@ -1701,19 +1701,6 @@ function createRollLink(label, dataset={}, { classes="roll-link", tag="a" }={}) 
 
 /* -------------------------------------------- */
 /*  Actions                                     */
-/* -------------------------------------------- */
-
-/**
- * Attach actions to chat message for requested rolls.
- * @param {ChatMessage5e} message
- * @param {HTMLElement} element
- */
-export function activateChatListeners(message, element) {
-  _addListeners(element.querySelectorAll('[data-action="endConcentration"]'), handleEndConcentration);
-  _addListeners(element.querySelectorAll('[data-action="concentration"]'), handleRoll);
-  _addListeners(element.querySelectorAll('[data-action="rollRequest"]'), handleRoll);
-}
-
 /* -------------------------------------------- */
 
 /**
@@ -1777,26 +1764,6 @@ async function handleAward(event, target) {
 /* -------------------------------------------- */
 
 /**
- * End concentration for the actor attached to a reminder button.
- * @param {Event} event         Triggering click event.
- * @param {HTMLElement} target  Button that was clicked.
- */
-async function handleEndConcentration(event, target) {
-  const dataset = getRollActionDataset(target);
-  const link = target.closest("a") ?? target;
-  link.disabled = true;
-  window.getSelection().empty();
-  try {
-    const actor = dataset.actorUuid ? await fromUuid(dataset.actorUuid) : null;
-    await actor?.endConcentration();
-  } finally {
-    link.disabled = false;
-  }
-}
-
-/* -------------------------------------------- */
-
-/**
  * Handle creating a roll request chat message.
  * @param {object|Event} dataset  Configuration dataset or triggering click event.
  * @param {HTMLElement} [target]  Button that was clicked.
@@ -1810,39 +1777,56 @@ async function handlePostRequest(dataset, target) {
   let buttons;
   if ( dataset.type === "check" ) buttons = createCheckRequestButtons(dataset);
   else if ( dataset.type === "save" ) buttons = createSaveRequestButtons(dataset);
-  else buttons = [createRequestButton({ ...dataset, format: "short" })];
+  else buttons = [createPromptButton({ ...dataset, format: "short" })];
 
   const MessageClass = getDocumentClass("ChatMessage");
-  const chatData = {
-    user: game.user.id,
-    content: await foundry.applications.handlebars.renderTemplate(
-      "systems/dnd5e/templates/chat/roll-request-card.hbs", { buttons }
-    ),
+  MessageClass.create({
     flavor: _loc("EDITOR.DND5E.Inline.RollRequest"),
-    speaker: MessageClass.getSpeaker({ user: game.user })
-  };
-  MessageClass.create(chatData);
+    speaker: MessageClass.getSpeaker({ user: game.user }),
+    system: { broadcast: true, buttons },
+    type: "prompt",
+    user: game.user.id
+  });
 }
 
 /* -------------------------------------------- */
 
 /**
- * Create a button for a chat request.
- * @param {object} dataset
+ * Create a button descriptor for a prompt message.
+ * @param {object} config
  * @returns {object}
  */
-function createRequestButton(dataset) {
-  return {
-    buttonLabel: createRollLabel({ ...dataset, icon: true }),
-    hiddenLabel: createRollLabel({ ...dataset, icon: true, hideDC: true }),
-    dataset: { ...dataset, action: "rollRequest", visibility: "all" }
-  };
+function createPromptButton(config) {
+  const { ability, dc, format, skill, tool, type, usingTool, visibility } = config;
+  const button = { ability, format, type, visibility };
+  if ( dc ) button.dc = Number(dc);
+  if ( skill ) button.skill = skill;
+  if ( tool ) button.tool = tool;
+  if ( usingTool ) button.usingTool = usingTool;
+  return button;
 }
 
 /* -------------------------------------------- */
 
 /**
- * Handle performing a roll.
+ * Perform the roll described by the provided configuration.
+ * @param {object} config  Roll configuration.
+ * @param {Event} [event]  Triggering click event.
+ * @returns {Promise}
+ */
+export async function roll(config, event) {
+  switch ( config.type ) {
+    case "attack": return rollAttack(config, event);
+    case "damage": return rollDamage(config, event);
+    case "item": return useItem(config, event);
+    default: return rollCheckSave(config, event);
+  }
+}
+
+/* -------------------------------------------- */
+
+/**
+ * Handle performing a roll from a link or button in rendered content.
  * @param {Event} event         Triggering click event.
  * @param {HTMLElement} target  Button that was clicked.
  * @returns {Promise}
@@ -1853,12 +1837,7 @@ async function handleRoll(event, target) {
   link.disabled = true;
   window.getSelection().empty();
   try {
-    switch ( dataset.type ) {
-      case "attack": return await rollAttack(dataset, event);
-      case "damage": return await rollDamage(dataset, event);
-      case "item": return await useItem(dataset, event);
-      default: return await rollCheckSave(dataset, event);
-    }
+    return await roll(dataset, event);
   } finally {
     link.disabled = false;
   }

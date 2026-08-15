@@ -38,7 +38,6 @@
  * @typedef {BasicRollProcessConfiguration} D20RollProcessConfiguration
  * @property {boolean} [advantage]             Apply advantage to each roll.
  * @property {boolean} [disadvantage]          Apply disadvantage to each roll.
- * @property {boolean} [elvenAccuracy]         Use three dice when rolling with advantage.
  * @property {boolean} [halflingLucky]         Add a re-roll once modifier to the d20 die.
  * @property {boolean} [reliableTalent]        Set the minimum for the d20 roll to 10.
  * @property {D20RollConfiguration[]} rolls    Configuration data for individual rolls.
@@ -74,6 +73,7 @@
 
 /**
  * @typedef {D20RollProcessConfiguration} AttackRollProcessConfiguration
+ * @property {string} [ability]               Ability to use with the attack.
  * @property {Item5e|boolean} [ammunition]    Specific ammunition to consume, or `false` to prevent any ammo usage.
  * @property {WeaponAttackMode} [attackMode]  Mode to use for making the attack and rolling damage.
  * @property {string} [mastery]               Weapon mastery option to use.
@@ -105,6 +105,7 @@
  *
  * @typedef {BasicRollProcessConfiguration} DamageRollProcessConfiguration
  * @property {DamageRollConfiguration[]} rolls         Configuration data for individual rolls.
+ * @property {string} [ability]                        Ability used to calculate the damage modifier.
  * @property {CriticalDamageConfiguration} [critical]  Critical configuration for all rolls.
  * @property {string[]} [properties]                   Properties applied to all rolls.
  * @property {boolean} [isCritical]                    Treat each roll as a critical unless otherwise specified.
@@ -128,6 +129,17 @@
  * @property {string} [type]                           Type of damage represented.
  * @property {string[]} [types]                        List of damage types selectable in the configuration app. If no
  *                                                     type is provided, then the first of these types will be used.
+ */
+
+/**
+ * @typedef DamageBreakdown
+ * @property {{ classes: string, result: string }[]} dice  Individual die results and their display classes.
+ * @property {number|null} constant                        Deterministic remainder of the roll, or null if the formula
+ *                                                         multiplies or divides and no single constant can be given.
+ * @property {string|null} icon                            Icon representing the method used to produce the dice.
+ * @property {string|null} method                          Localization key for the method used to produce the dice.
+ * @property {number} total                                Total damage.
+ * @property {string} [type]                               Type of damage represented.
  */
 
 /**
@@ -195,6 +207,7 @@
 
 /**
  * @typedef {BasicRollConfigurationDialogOptions} AttackRollConfigurationDialogOptions
+ * @property {FormSelectOption[]} abilityOptions     Ability options that can be selected for this attack.
  * @property {FormSelectOption[]} ammunitionOptions  Ammunition that can be used with the attack.
  * @property {FormSelectOption[]} attackModeOptions  Different modes of attack.
  * @property {FormSelectOption[]} masteryOptions     Available masteries for the attacking weapon.

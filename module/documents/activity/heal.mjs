@@ -48,11 +48,9 @@ export default class HealActivity extends ActivityMixin(BaseHealActivityData) {
   _usageChatButtons(message) {
     if ( !this.healing.formula ) return super._usageChatButtons(message);
     return [{
-      label: _loc("DND5E.HEAL.HealingButton"),
-      icon: '<i class="dnd5e-icon" data-src="systems/dnd5e/icons/svg/damage/healing.svg"></i>',
-      dataset: {
-        action: "rollHealing"
-      }
+      action: "rollHealing",
+      icon: "systems/dnd5e/icons/svg/damage/healing.svg",
+      label: { value: "DND5E.HEAL.HealingButton" }
     }].concat(super._usageChatButtons(message));
   }
 
@@ -60,7 +58,7 @@ export default class HealActivity extends ActivityMixin(BaseHealActivityData) {
 
   /** @override */
   async _triggerSubsequentActions(config, results) {
-    this.rollDamage({ event: config.event }, {}, { data: { "flags.dnd5e.originatingMessage": results.message?.id } });
+    this.rollDamage({ event: config.event }, {}, { data: { system: { origin: results.message?.id } } });
   }
 
   /* -------------------------------------------- */
@@ -70,7 +68,7 @@ export default class HealActivity extends ActivityMixin(BaseHealActivityData) {
   /** @inheritDoc */
   async rollDamage(config={}, dialog={}, message={}) {
     const messageConfig = foundry.utils.mergeObject({
-      "data.flags.dnd5e.roll.type": "healing"
+      "data.type": "healing"
     }, message);
     return super.rollDamage(config, dialog, messageConfig);
   }

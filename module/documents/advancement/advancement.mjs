@@ -65,14 +65,15 @@ export default class Advancement extends PseudoDocumentMixin(BaseAdvancementData
    */
   static get metadata() {
     return {
-      name: "Advancement",
-      label: "DOCUMENT.DND5E.Advancement",
-      order: 100,
+      collection: "advancement",
+      hint: "",
       icon: "icons/svg/upgrade.svg",
+      label: "DOCUMENT.DND5E.Advancement",
+      multiLevel: false,
+      name: "Advancement",
+      order: 100,
       typeIcon: "icons/svg/upgrade.svg",
       title: _loc("DND5E.AdvancementTitle"),
-      hint: "",
-      multiLevel: false,
       validItemTypes: new Set(["background", "class", "race", "subclass"]),
       apps: {
         config: AdvancementConfig,
@@ -195,6 +196,17 @@ export default class Advancement extends PseudoDocumentMixin(BaseAdvancementData
    */
   configuredForLevel(level) {
     return true;
+  }
+
+  /* -------------------------------------------- */
+
+  /**
+   * Short value displayed at each level. Should generally never be more than 4 characters long.
+   * @param {number} level  Level for which to retrieve the value.
+   * @returns {number|string|null}
+   */
+  displayValueForLevel(level) {
+    return this.valueForLevel?.(level) ?? null;
   }
 
   /* -------------------------------------------- */

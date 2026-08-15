@@ -10,6 +10,7 @@ import EquipmentData from "../data/item/equipment.mjs";
 import SpellData from "../data/item/spell.mjs";
 import ActivitiesTemplate from "../data/item/templates/activities.mjs";
 import PhysicalItemTemplate from "../data/item/templates/physical-item.mjs";
+import PropertyField from "../data/shared/property-field.mjs";
 import { formatIdentifier, staticID } from "../utils.mjs";
 import Scaling from "./scaling.mjs";
 import Proficiency from "./actor/proficiency.mjs";
@@ -654,13 +655,9 @@ export default class Item5e extends SystemDocumentMixin(Item) {
    * @protected
    */
   _prepareProficiency() {
-    if ( !["spell", "weapon", "equipment", "tool", "feat", "consumable"].includes(this.type) ) return;
-    if ( !this.actor?.system.attributes?.prof ) {
-      this.system.prof = new Proficiency(0, 0);
-      return;
-    }
-
-    this.system.prof = new Proficiency(this.actor.system.attributes.prof, this.system.proficiencyMultiplier ?? 0);
+    if ( !this.system.hasProficiency ) return;
+    const prof = this.actor?.system.attributes?.prof;
+    this.system.prof = new Proficiency(Number.isFinite(prof) ? prof : 0, this.system.proficiencyMultiplier ?? 0);
   }
 
   /* -------------------------------------------- */
@@ -767,26 +764,16 @@ export default class Item5e extends SystemDocumentMixin(Item) {
    * @returns {Promise<ChatMessage5e|object|void>}
    */
   async displayCard(message={}) {
-    const context = {
-      actor: this.actor,
-      config: CONFIG.DND5E,
-      tokenId: this.actor.token?.uuid || null,
-      item: this,
-      data: await this.system.getCardData(),
-      isSpell: this.type === "spell"
-    };
-
     const messageConfig = foundry.utils.mergeObject({
       create: message?.createMessage ?? true,
       data: {
-        content: await foundry.applications.handlebars.renderTemplate(
-          "systems/dnd5e/templates/chat/item-card.hbs", context
-        ),
         flags: {
-          "dnd5e.item": { id: this.id, uuid: this.uuid, type: this.type }
+          core: { canPopout: true }
         },
         speaker: ChatMessage.getSpeaker({ actor: this.actor, token: this.actor.token }),
-        title: this.name
+        system: await this.system.getCardData(),
+        title: this.name,
+        type: "item"
       },
       rollMode: CONFIG.Dice.BasicRoll.getMessageMode()
     }, message);
@@ -847,11 +834,14 @@ export default class Item5e extends SystemDocumentMixin(Item) {
     });
 
     // Type specific properties
-    context.properties = [
+    const usage = this.system.getUsageData?.() ?? {};
+    context.properties = PropertyField.getLabels([
       ...this.system.chatProperties ?? [],
       ...this.system.equippableItemCardProperties ?? [],
-      ...Object.values(this.labels.activations?.[0] ?? {})
-    ].filter(p => p);
+      ...PropertyField.getUsageProperties(usage)
+    ].filter(p => {
+      return (p.type !== "duration") || (usage.duration.units !== "inst") || this.system.alwaysShowDuration;
+    }), { ...usage, properties: this.system.properties });
 
     return context;
   }
@@ -921,7 +911,7 @@ export default class Item5e extends SystemDocumentMixin(Item) {
    */
   static _onChatCardToggleContent(event) {
     const header = event.target.closest(".collapsible");
-    if ( !event.target.closest(".collapsible-content.card-content") ) {
+    if ( !event.target.closest(".collapsible-content") ) {
       event.preventDefault();
       header.classList.toggle("collapsed");
 

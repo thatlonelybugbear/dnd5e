@@ -236,22 +236,10 @@
       position: absolute;
       inset: 0;
       padding: 8px;
-      padding-inline-end: 0;
       overflow: hidden auto;
-      scrollbar-width: thin;
-      scrollbar-gutter: stable;
-      scrollbar-color: var(--dnd5e-color-scrollbar) transparent;
       transition: all 450ms ease;
-
-      &::-webkit-scrollbar-track {
-        box-shadow: none;
-        border-radius: 0;
-      }
-
-      &::-webkit-scrollbar-thumb {
-        border: none;
-        background: var(--dnd5e-color-scrollbar);
-      }
+      .scrollbar();
+      .scroll-gutter(8px);
     }
 
     /* Sidebar */
@@ -697,8 +685,6 @@
         }
       }
 
-      .tab:not([data-tab="details"]) { padding-inline: .5rem; }
-
       .tab:not([data-tab="details"], [data-tab="biography"], [data-tab="bastion"], [data-tab="specialTraits"]) {
         // enough room that the "create new" button doesn't overlap when scrolled all the way down
         padding-bottom: calc(1.5rem + 30px);
@@ -882,7 +868,13 @@
         > h3 > a { color: var(--dnd5e-color-black); }
       }
 
-      .pill { padding: .25rem .5rem; }
+      .pill {
+        font-family: var(--dnd5e-font-roboto);
+        font-weight: bold;
+        line-height: normal;
+        padding: .25rem .5rem;
+        text-transform: uppercase;
+      }
     }
 
     /* Item Sections */

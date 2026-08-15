@@ -20,7 +20,7 @@ const {
 
 /**
  * @import { DamageRollConfiguration, DamageRollProcessConfiguration } from "../../dice/_types.mjs";
- * @import { ActivityRollData, ActivityRollDataOptions } from "../../documents/_types.mjs";
+ * @import { ActivityRollData, RollDataOptions } from "../../documents/_types.mjs";
  * @import { DamageFormulaOptions } from "../shared/_types.mjs";
  * @import { ActivityData, BehaviorApplicationData, EffectApplicationData } from "./_types.mjs";
  */
@@ -752,6 +752,31 @@ export default class BaseActivityData extends foundry.abstract.DataModel {
   /* -------------------------------------------- */
 
   /**
+   * Capture the activity data for a chat card.
+   * @returns {Promise<object>}
+   */
+  async getCardData() {
+    const { description, id, img, name, type, uuid } = this;
+    return {
+      description: description.value,
+      activity: { id, img, name, type, uuid, chatFlavor: description.chatFlavor }
+    };
+  }
+
+  /* -------------------------------------------- */
+
+  /**
+   * Capture the data describing how this activity is used.
+   * @returns {UsageData}
+   */
+  getUsageData() {
+    const { activation, duration, range, target } = this;
+    return { activation, duration, range, target };
+  }
+
+  /* -------------------------------------------- */
+
+  /**
    * Effects that can be applied from this activity.
    * @returns {Promise<ActiveEffect5e[]>|null}
    */
@@ -776,7 +801,7 @@ export default class BaseActivityData extends foundry.abstract.DataModel {
     if ( !this.damage?.parts ) return foundry.utils.mergeObject({ rolls: [] }, config);
 
     const rollConfig = foundry.utils.deepClone(config);
-    rollData ??= this.getRollData({ roll: { attackMode: config.attackMode } });
+    rollData ??= this.getRollData({ roll: { ability: config.ability, attackMode: config.attackMode } });
     rollData.roll ??= {};
     Object.assign(rollData.roll, {
       isCritical: rollConfig.isCritical,
@@ -811,14 +836,14 @@ export default class BaseActivityData extends foundry.abstract.DataModel {
 
   /**
    * Prepare a data object which defines the data schema used by dice roll commands against this Activity.
-   * @param {ActivityRollDataOptions} [options]
+   * @param {RollDataOptions} [options]
    * @returns {ActivityRollData}
    */
   getRollData(options={}) {
     const rollData = this.item.getRollData(options);
     rollData.activity = { ...this };
     rollData.consumed = this.item.flags.dnd5e?.consumed;
-    rollData.mod = this.actor?.system.abilities?.[this.ability]?.mod ?? 0;
+    rollData.mod = this.actor?.system.abilities?.[options.roll?.ability ?? this.ability]?.mod ?? 0;
     return rollData;
   }
 
@@ -841,7 +866,8 @@ export default class BaseActivityData extends foundry.abstract.DataModel {
     const parts = scaledFormula ? [scaledFormula] : [];
     const lastType = this.item.getFlag("dnd5e", `last.${this.id}.damageType.${index}`);
     const data = { ...rollData, roll: foundry.utils.deepClone(rollData.roll ?? {}) };
-    data.roll.damageType = (damage.types.has(lastType) ? lastType : null) ?? damage.types.first();
+    data.roll.damage ??= {};
+    data.roll.damage.type = (damage.types.has(lastType) ? lastType : null) ?? damage.types.first();
 
     if ( index === 0 ) {
       const actionType = this.getActionType(rollConfig.attackMode);
@@ -863,7 +889,7 @@ export default class BaseActivityData extends foundry.abstract.DataModel {
     return {
       data, parts,
       options: {
-        type: data.roll.damageType,
+        type: data.roll.damage.type,
         types: Array.from(damage.types),
         properties: data.roll.properties
       }

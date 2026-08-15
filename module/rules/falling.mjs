@@ -1,4 +1,5 @@
-import { convertLength, formatLength, getTargetDescriptors } from "../utils.mjs";
+import TargetsField from "../data/chat-message/fields/targets-field.mjs";
+import { convertLength, formatLength } from "../utils.mjs";
 
 /**
  * @import Actor5e from "../documents/actor/actor.mjs";
@@ -51,14 +52,15 @@ export async function postFallDamage(targets, distance) {
     data: {
       flags: {
         dnd5e: {
-          context: { fall: true }, messageType: "roll", roll: { type: "damage" },
-          targets: getTargetDescriptors(targets)
+          context: { fall: true }
         }
       },
-      flavor: game.i18n.format("DND5E.FALLING.DamageFlavor", {
+      flavor: _loc("DND5E.FALLING.DamageFlavor", {
         distance: formatLength(Math.round(distance), units)
       }),
-      speaker: ChatMessage.implementation.getSpeaker()
+      speaker: ChatMessage.implementation.getSpeaker(),
+      system: { targets: TargetsField.getDescriptors(targets) },
+      type: "damage"
     }
   });
   if ( !rolls?.length ) return;

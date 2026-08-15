@@ -57,11 +57,9 @@ export default class TeleportActivity extends ActivityMixin(TeleportActivityData
   _usageChatButtons(message) {
     if ( !this.canPlanTeleport ) return super._usageChatButtons(message);
     return [{
-      label: _loc("DND5E.TELEPORT.Action.Teleport"),
-      icon: '<i class="fa-solid fa-person-walking-dashed-line-arrow-right" inert></i>',
-      dataset: {
-        action: "planTeleport"
-      }
+      action: "planTeleport",
+      icon: "fa-solid fa-person-walking-dashed-line-arrow-right",
+      label: { value: "DND5E.TELEPORT.Action.Teleport" }
     }].concat(super._usageChatButtons(message));
   }
 
@@ -137,7 +135,7 @@ export default class TeleportActivity extends ActivityMixin(TeleportActivityData
      * @function dnd5e.postTeleport
      * @memberof hookEvents
      * @param {TeleportActivity} activity         The activity that is performing the teleportation.
-     * @param {TeleportMovementResult[]} results  Plans for tokens that are to be moved.
+     * @param {TeleportMovementResult[]} results  Information on tokens that have moved.
      */
     Hooks.callAll("dnd5e.postTeleport", this, results);
 

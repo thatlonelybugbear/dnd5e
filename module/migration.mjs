@@ -1,6 +1,14 @@
 import { formatIdentifier, log } from "./utils.mjs";
 
 /**
+ * Number of chat messages to update per batch during world migration.
+ * @type {number}
+ */
+const MESSAGE_MIGRATION_BATCH_SIZE = 64;
+
+/* -------------------------------------------- */
+
+/**
  * Perform a system migration for the entire World, applying migrations for Actors, Items, and Compendium packs.
  * @param {object} [options={}]
  * @param {boolean} [options.bypassVersionCheck=false]  Bypass certain migration restrictions gated behind system
@@ -106,19 +114,27 @@ export async function migrateWorld({ bypassVersionCheck=false }={}) {
     incrementProgress();
   }
 
-  // Migrate World Messages
+  // Migrate World Messages in batches
+  let messageBatch = [];
+  const flushMessageBatch = async () => {
+    if ( !messageBatch.length ) return;
+    await ChatMessage.implementation.updateDocuments(messageBatch, { enforceTypes: false, render: false });
+    messageBatch = [];
+  };
   for ( const m of game.messages ) {
     try {
-      const updateData = migrateMessageData(m.toObject(), migrationData);
+      const updateData = migrateMessageData(m.toObject());
       if ( !foundry.utils.isEmpty(updateData) ) {
         log(`Migrating Message document ${m.id}`);
-        await m.update(updateData, { enforceTypes: false, render: false });
+        messageBatch.push({ _id: m.id, ...updateData });
+        if ( messageBatch.length >= MESSAGE_MIGRATION_BATCH_SIZE ) await flushMessageBatch();
       }
     } catch(err) {
       err.message = `Failed dnd5e system migration for Message ${m.id}: ${err.message}`;
       console.error(err);
     }
   }
+  await flushMessageBatch();
 
   // Migrate World Roll Tables
   for ( const table of game.tables ) {
@@ -772,19 +788,44 @@ export function migrateMacroData(macro, migrationData) {
 export function migrateMessageData(messageData) {
   const updateData = {};
   const { flags } = messageData;
+  const targets = flags?.dnd5e?.targets?.map(({ ac, img, name, uuid }) => ({ ac, img, name, actor: uuid }));
+  if ( targets ) updateData["flags.dnd5e.targets"] = _del;
 
-  if ( (flags?.dnd5e?.messageType === "usage") && (messageData.type !== "usage") ) {
+  const origin = flags?.dnd5e?.originatingMessage;
+  if ( origin ) updateData["flags.dnd5e.originatingMessage"] = _del;
+
+  const sources = {};
+  for ( const key of ["activity", "item"] ) {
+    const { id, type, uuid } = flags?.dnd5e?.[key] ?? {};
+    if ( id || type || uuid ) {
+      sources[key] = { id, type, uuid };
+      updateData[`flags.dnd5e.${key}`] = _del;
+    }
+  }
+
+  if ( messageData.type !== "base" ) {
+    if ( origin ) updateData["system.origin"] = origin;
+    if ( targets ) updateData["system.targets"] = targets;
+    for ( const [key, source] of Object.entries(sources) ) updateData[`system.${key}`] = source;
+    return updateData;
+  }
+
+  const rollType = flags?.dnd5e?.roll?.type;
+
+  if ( (flags?.dnd5e?.messageType === "usage") || flags?.dnd5e?.use ) {
     const use = flags.dnd5e.use;
     updateData.type = "usage";
     updateData.system = _replace({
+      ...messageData.system,
+      ...sources,
+      targets,
       cause: use?.cause,
       concentration: use?.concentrationId,
-      deltas: use?.consumed,
+      deltas: { ...messageData.system?.deltas, ...use?.consumed },
       effects: use?.effects?.map?.(id => `.ActiveEffect.${id}`),
       scaling: use?.scaling,
-      spellLevel: use?.spellLevel
+      level: use?.spellLevel
     });
-    updateData["flags.dnd5e.messageType"] = _del;
     updateData["flags.dnd5e.scaling"] = _del;
     updateData["flags.dnd5e.use.cause"] = _del;
     updateData["flags.dnd5e.use.concentrationId"] = _del;
@@ -793,11 +834,72 @@ export function migrateMessageData(messageData) {
     updateData["flags.dnd5e.use.spellLevel"] = _del;
   }
 
-  else if ( flags?.dnd5e?.bastion && (messageData.type === "base") ) {
+  else if ( flags?.dnd5e?.bastion ) {
     const bastion = flags.dnd5e.bastion;
     updateData.type = "orders" in bastion ? "bastionTurn" : "bastionAttack";
     updateData.system = _replace(bastion);
     updateData["flags.dnd5e.bastion"] = _del;
+  }
+
+  else if ( (rollType === "ability") || (rollType === "skill") || (rollType === "tool") ) {
+    const roll = flags.dnd5e.roll;
+    const ability = roll.ability
+      ?? CONFIG.DND5E.skills[roll.skillId]?.ability
+      ?? CONFIG.DND5E.tools[roll.toolId]?.ability
+      ?? "int";
+    updateData.type = "check";
+    updateData.system = _replace({ ability, origin, skill: roll.skillId, tool: roll.toolId });
+  }
+
+  else if ( rollType === "save" ) {
+    const roll = flags.dnd5e.roll;
+    updateData.type = "save";
+    updateData.system = _replace({ origin, ability: roll.ability, resisted: roll.forceSuccess });
+  }
+
+  else if ( rollType === "death" ) {
+    updateData.type = "save";
+    updateData.system = _replace({ origin, type: "death" });
+  }
+
+  else if ( rollType === "attack" ) {
+    const roll = flags.dnd5e.roll;
+    updateData.type = "attack";
+    updateData.system = _replace({
+      ...sources,
+      origin, targets,
+      ability: roll.ability,
+      ammunition: roll.ammunition,
+      deltas: roll.ammunitionData ? { deleted: [roll.ammunitionData] } : null,
+      mastery: roll.mastery,
+      mode: roll.attackMode
+    });
+  }
+
+  else if ( (rollType === "damage") || (rollType === "healing") ) {
+    updateData.type = rollType;
+    updateData.system = _replace({ ...sources, origin, targets, onSave: flags.dnd5e.roll.damageOnSave ?? null });
+  }
+
+  /* TODO: Re-instate these migrations when foundryvtt/foundryvtt#14229 is resolved.
+  else if ( rollType === "generic" ) {
+    updateData.type = "generic";
+    updateData.system = _replace({ ...sources, origin, targets });
+  }
+
+  else if ( rollType === "hitDie" ) {
+    updateData.type = "hitDie";
+    updateData.system = _replace({ origin });
+  }
+
+  else if ( rollType === "hitPoints" ) {
+    updateData.type = "hitPoints";
+    updateData.system = _replace({ origin });
+  }*/
+
+  if ( updateData.type ) {
+    if ( rollType ) updateData["flags.dnd5e.roll"] = _del;
+    if ( flags.dnd5e.messageType ) updateData["flags.dnd5e.messageType"] = _del;
   }
 
   return updateData;

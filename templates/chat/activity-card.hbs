@@ -1,6 +1,7 @@
+{{!-- Deprecated since DnD5e 6.0, removed in 6.2. --}}
 <div class="chat-card activation-card">
-    <section class="card-header description {{~#if description.chat}} collapsible{{/if}}"
-             {{~#if description.concealed}} data-concealed{{/if}}>
+    <section class="card-header description {{~#if description}} collapsible{{/if}}"
+             {{~#if concealed}} data-concealed{{/if}}>
         <header class="summary">
             <img class="gold-icon" src="{{ item.img }}" alt="{{ item.name }}">
             <div class="name-stacked border">
@@ -9,11 +10,11 @@
                 <span class="subtitle">{{{ subtitle }}}</span>
                 {{/if}}
             </div>
-            {{#if description.chat}}<i class="fa-solid fa-chevron-down fa-fw" inert></i>{{/if}}
+            {{#if description}}<i class="fa-solid fa-chevron-down fa-fw" inert></i>{{/if}}
         </header>
-        {{#if description.chat}}
+        {{#if description}}
         <section class="details collapsible-content card-content">
-            <div class="wrapper">{{{ description.chat }}}</div>
+            <div class="wrapper">{{{ description }}}</div>
         </section>
         {{/if}}
     </section>
@@ -21,7 +22,8 @@
     {{#if buttons}}
     <div class="card-buttons">
         {{#each buttons}}
-        <button type="button" {{ dnd5e-dataset dataset }}>
+        <button type="button" {{ dnd5e-dataset dataset }}
+                {{~#if visibility}} data-visibility="{{ visibility }}"{{/if}}>
             {{{ icon }}} <span>{{{ label }}}</span>
         </button>
         {{/each}}

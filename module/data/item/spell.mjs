@@ -124,27 +124,19 @@ export default class SpellData extends ItemDataModel.mixin(ActivitiesTemplate, I
   /*  Properties                                  */
   /* -------------------------------------------- */
 
+  /** @override */
+  get alwaysShowDuration() {
+    return true;
+  }
+
+  /* -------------------------------------------- */
+
   /**
    * Attack classification of this spell.
    * @type {"spell"}
    */
   get attackClassification() {
     return "spell";
-  }
-
-  /* -------------------------------------------- */
-
-  /**
-   * The identifier of the spellcasting class associated with this spell, resolved through subclass parentage where
-   * necessary. Returns an empty string if the spell was not granted by a class or subclass item.
-   * @type {string}
-   */
-  get classIdentifier() {
-    if ( !this.sourceItem ) return "";
-    const sourceItem = this.parent?.actor?.identifiedItems.get(this.sourceItem)?.first();
-    if ( sourceItem?.type === "class" ) return sourceItem.identifier;
-    if ( sourceItem?.type === "subclass" ) return sourceItem.system.classIdentifier ?? "";
-    return "";
   }
 
   /* -------------------------------------------- */
@@ -156,6 +148,24 @@ export default class SpellData extends ItemDataModel.mixin(ActivitiesTemplate, I
     const spellcasting = this.parent?.actor?.spellcastingClasses[this.classIdentifier]?.spellcasting.ability
       ?? this.parent?.actor?.system.attributes?.spellcasting;
     return new Set(spellcasting ? [spellcasting] : []);
+  }
+
+  /* -------------------------------------------- */
+
+  /**
+   * The identifier of the spellcasting class associated with this spell, resolved through subclass parentage where
+   * necessary. Returns an empty string if the spell was not granted by a class or subclass item.
+   * @type {string}
+   */
+  get classIdentifier() {
+    if ( !this.sourceItem ) return "";
+    let sourceItem = this.parent?.actor?.identifiedItems.get(this.sourceItem)?.first();
+    if ( sourceItem && (sourceItem.type !== "class") && (sourceItem.type !== "subclass") ) {
+      sourceItem = this.parent?.actor?.items.get(sourceItem.getFlag("dnd5e", "advancementRoot")?.slice(0, 16));
+    }
+    if ( sourceItem?.type === "class" ) return sourceItem.identifier;
+    if ( sourceItem?.type === "subclass" ) return sourceItem.system.classIdentifier ?? "";
+    return "";
   }
 
   /* -------------------------------------------- */
@@ -197,11 +207,31 @@ export default class SpellData extends ItemDataModel.mixin(ActivitiesTemplate, I
    */
   get chatProperties() {
     return [
-      this.parent.labels.level,
-      this.parent.labels.components.vsm + (this.parent.labels.materials ? ` (${this.parent.labels.materials})` : ""),
-      ...this.parent.labels.components.tags,
-      this.parent.labels.duration
+      { type: "level", level: this.level },
+      { type: "components", materials: this.properties.has("material") ? this.materials.value : "" },
+      ...this.tagProperties
     ];
+  }
+
+  /* -------------------------------------------- */
+
+  /** @override */
+  get cardProperties() {
+    return [...this.tagProperties, { type: "components" }];
+  }
+
+  /* -------------------------------------------- */
+
+  /**
+   * Descriptors for the spell's tag properties, such as ritual or concentration.
+   * @type {object[]}
+   */
+  get tagProperties() {
+    return Array.from(this.properties).reduce((arr, property) => {
+      const config = this.validProperties.has(property) ? CONFIG.DND5E.itemProperties[property] : null;
+      if ( config?.isTag && config.label ) arr.push({ property, type: "property" });
+      return arr;
+    }, []);
   }
 
   /* -------------------------------------------- */
@@ -228,6 +258,13 @@ export default class SpellData extends ItemDataModel.mixin(ActivitiesTemplate, I
   /** @override */
   get criticalThreshold() {
     return this.parent?.actor?.flags.dnd5e?.spellCriticalThreshold ?? Infinity;
+  }
+
+  /* -------------------------------------------- */
+
+  /** @override */
+  get hasProficiency() {
+    return true;
   }
 
   /* -------------------------------------------- */
@@ -265,13 +302,6 @@ export default class SpellData extends ItemDataModel.mixin(ActivitiesTemplate, I
     const activity = this.linkedActivity;
     if ( !activity?.spell?.level || (activity.spell.level <= this.level) ) return null;
     return activity.spell.level - this.level;
-  }
-
-  /* -------------------------------------------- */
-
-  /** @override */
-  get tooltipSubtitle() {
-    return [this.parent.labels.level, CONFIG.DND5E.spellSchools[this.school]?.label];
   }
 
   /* -------------------------------------------- */
@@ -452,10 +482,38 @@ export default class SpellData extends ItemDataModel.mixin(ActivitiesTemplate, I
   /** @inheritDoc */
   async getCardData(options) {
     const context = await super.getCardData(options);
+    context.materials = this.properties.has("material") ? this.materials.value : "";
+    context.school = this.school;
+    context.subtitle = [
+      CONFIG.DND5E.spellLevels[context.level], CONFIG.DND5E.spellSchools[this.school]?.label
+    ].filter(_ => _);
+    context.properties = [
+      { type: "level", level: context.level, identity: true },
+      { type: "school", school: this.school, identity: true },
+      ...context.properties.filter(p => !p.identity)
+    ];
+    return context;
+  }
+
+  /* -------------------------------------------- */
+
+  /** @inheritDoc */
+  getUsageData(options) {
+    const usage = super.getUsageData(options);
+    usage.activation ??= this.activation;
+    usage.duration ??= this.duration;
+    usage.range ??= this.range;
+    usage.target ??= this.target;
+    return usage;
+  }
+
+  /* -------------------------------------------- */
+
+  /** @inheritDoc */
+  async getTooltipData(options) {
+    const context = await super.getTooltipData(options);
     context.isSpell = true;
-    const { activation, components, duration, range, target } = this.parent.labels;
-    context.properties = [components?.vsm, activation, duration, range, target].filter(_ => _);
-    if ( !this.properties.has("material") ) delete context.materials;
+    context.properties = [];
     return context;
   }
 

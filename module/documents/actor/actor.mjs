@@ -3,17 +3,15 @@ import CreateDocumentDialog from "../../applications/create-document-dialog.mjs"
 import SkillToolRollConfigurationDialog from "../../applications/dice/skill-tool-configuration-dialog.mjs";
 import PropertyAttribution from "../../applications/property-attribution.mjs";
 import TravelField from "../../data/actor/fields/travel-field.mjs";
+import AttributesFields from "../../data/actor/templates/attributes.mjs";
 import ActivationsField from "../../data/chat-message/fields/activations-field.mjs";
 import { ActorDeltasField } from "../../data/chat-message/fields/deltas-field.mjs";
-import AdvantageModeField from "../../data/fields/advantage-mode-field.mjs";
 import D20RollModificationField from "../../data/shared/d20-roll-modification-field.mjs";
 import TransformationSetting from "../../data/settings/transformation-setting.mjs";
-import { createRollLabel } from "../../enrichers.mjs";
 import {
   convertTime, defaultUnits, formatLength, formatNumber, formatTime, simplifyBonus, staticID
 } from "../../utils.mjs";
 import ActiveEffect5e from "../active-effect.mjs";
-import AppliedRules from "../applied-rules.mjs";
 import Item5e from "../item.mjs";
 import SystemDocumentMixin from "../mixins/document.mjs";
 import Proficiency from "./proficiency.mjs";
@@ -34,7 +32,7 @@ import ConditionData from "../../data/active-effect/condition.mjs";
  * } from "../../dice/_types.mjs";
  * @import {
  *   ActorRollData, ActorUpdatesDescription, DamageAffectCategory, DamageApplicationOptions,
- *   DamageDescription, DamageSummary, RestConfiguration, RestResult, RollDataOptions,
+ *   DamageDescription, DamageSummary, DeathSaveOutcome, RestConfiguration, RestResult, RollDataOptions,
  *   SpellcastingDescription
  * } from "../_types.mjs";
  */
@@ -813,9 +811,8 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
     if ( Hooks.call("dnd5e.preCalculateDamage", this, damages, options) === false ) return false;
 
     const multiplier = options.multiplier ?? 1;
-    const treatAs = options.originatingMessage?.flags?.dnd5e?.roll?.type
-      ? options.originatingMessage.flags.dnd5e.roll.type === "healing" ? "healing" : "damage"
-      : options.only ?? "damage";
+    const { isHealing } = options.originatingMessage?.system ?? {};
+    const treatAs = isHealing === undefined ? (options.only ?? "damage") : isHealing ? "healing" : "damage";
 
     const skipped = type => {
       if ( type === "maximum" ) return options.only ? options.only !== treatAs : false;
@@ -1129,31 +1126,14 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
     const isConcentrating = this.concentration.effects.size > 0;
     if ( !isConcentrating ) return null;
 
-    const dataset = {
-      action: "concentration",
-      dc: dc
-    };
-    if ( ability in CONFIG.DND5E.abilities ) dataset.ability = ability;
-
-    const config = {
-      type: "concentration",
-      format: "short",
-      icon: true
-    };
+    const button = { dc, format: "short", type: "concentration" };
+    if ( ability in CONFIG.DND5E.abilities ) button.ability = ability;
 
     return ChatMessage.implementation.create({
-      content: await foundry.applications.handlebars.renderTemplate(
-        "systems/dnd5e/templates/chat/roll-request-card.hbs",
-        {
-          buttons: [{
-            dataset: { ...dataset, type: "concentration", visibility: "all" },
-            buttonLabel: createRollLabel({ ...dataset, ...config }),
-            hiddenLabel: createRollLabel({ ...dataset, ...config, hideDC: true })
-          }]
-        }
-      ),
-      whisper: game.users.filter(user => this.testUserPermission(user, "OWNER")),
-      speaker: ChatMessage.implementation.getSpeaker({ actor: this })
+      speaker: ChatMessage.implementation.getSpeaker({ actor: this }),
+      system: { broadcast: false, buttons: [button] },
+      type: "prompt",
+      whisper: game.users.filter(user => this.testUserPermission(user, "OWNER"))
     });
   }
 
@@ -1167,23 +1147,11 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
     const isConcentrating = this.concentration.effects.size > 0;
     if ( !isConcentrating ) return null;
 
-    const label = `<i class="fa-solid fa-ban" inert></i>${
-      _loc("DND5E.CONCENTRATION.Action.Break")
-    }`;
-
     return ChatMessage.implementation.create({
-      content: await foundry.applications.handlebars.renderTemplate(
-        "systems/dnd5e/templates/chat/roll-request-card.hbs",
-        {
-          buttons: [{
-            dataset: { action: "endConcentration", actorUuid: this.uuid, visibility: "all" },
-            buttonLabel: label,
-            hiddenLabel: label
-          }]
-        }
-      ),
-      whisper: game.users.filter(user => this.testUserPermission(user, "OWNER")),
-      speaker: ChatMessage.implementation.getSpeaker({ actor: this })
+      speaker: ChatMessage.implementation.getSpeaker({ actor: this }),
+      system: { broadcast: false, buttons: [{ type: "endConcentration" }] },
+      type: "prompt",
+      whisper: game.users.filter(user => this.testUserPermission(user, "OWNER"))
     });
   }
 
@@ -1329,7 +1297,8 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
 
     const relevant = type === "skill" ? this.system.skills?.[config.skill] : this.system.tools?.[config.tool];
     const alternate = type === "skill" ? this.system.tools?.[config.tool] : this.system.skills?.[config.skill];
-    const abilityId = config.ability ?? relevant?.ability ?? (type === "skill" ? skillConfig.ability : toolConfig.ability);
+    const abilityId = config.ability ?? relevant?.ability
+      ?? (type === "skill" ? skillConfig.ability : toolConfig.ability) ?? "int";
     const hostActor = this.isPolymorphed && this.flags?.dnd5e?.transformOptions?.mergeSkills && (type === "skill")
       ? game.actors.get(this.flags.dnd5e?.originalActor) : null;
     const buildConfig = this._buildSkillToolConfig.bind(this, type, hostActor);
@@ -1379,19 +1348,12 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
     const messageConfig = foundry.utils.mergeObject({
       create: true,
       data: {
-        flags: {
-          dnd5e: {
-            messageType: "roll",
-            roll: {
-              [`${type}Id`]: config[type],
-              type
-            }
-          }
-        },
         flavor: type === "skill"
           ? _loc("DND5E.SkillPromptTitle", { skill: skillConfig.label, ability: abilityLabel })
           : _loc("DND5E.ToolPromptTitle", { tool: Trait.keyLabel(config.tool, { trait: "tool" }) ?? "" }),
-        speaker: ChatMessage.getSpeaker({ actor: this })
+        speaker: ChatMessage.getSpeaker({ actor: this }),
+        system: { ability: abilityId, skill: config.skill, tool: config.tool },
+        type: "check"
       }
     }, message);
 
@@ -1410,7 +1372,9 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
      * @param {string} [data.tool]    ID of the tool that was rolled as defined in `CONFIG.DND5E.tools`.
      * @param {Actor5e} data.subject  Actor for which the roll has been performed.
      */
-    const data = { ability: rollConfig.ability, [type]: rollConfig[type], subject: this };
+    const data = {
+      ability: rollConfig.ability, skill: rollConfig.skill, subject: this, tool: rollConfig.tool
+    };
     Hooks.callAll(`dnd5e.roll${name}`, rolls, data);
     Hooks.callAll(`dnd5e.roll${name}V2`, rolls, data);
 
@@ -1563,7 +1527,7 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
     const rollData = this.getRollData({ roll: true });
     Object.assign(rollData.roll, {
       ability: config.ability,
-      proficient: ability?.[`${type}Prof`]?.multiplier >= 1,
+      proficient: ability?.[type]?.prof?.multiplier >= 1,
       type: config[`${type}Type`] ?? "ability"
     });
     const { bonus, ...options } = D20RollModificationField.combineFields(this.system, [
@@ -1571,7 +1535,7 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
     ], { rules: { category: type, actor: this, rollData } });
     let { parts, data } = CONFIG.Dice.D20Roll.constructParts({
       mod: ability?.mod,
-      prof: ability?.[`${type}Prof`].hasProficiency ? ability[`${type}Prof`].term : null,
+      prof: ability?.[type].prof.hasProficiency ? ability[type].prof.term : null,
       ruleBonus: bonus,
       cover: (config.ability === "dex") && (type === "save") ? this.system.attributes?.ac?.cover : null
     }, rollData);
@@ -1588,24 +1552,15 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
 
     const dialogConfig = foundry.utils.deepClone(dialog);
 
-    const messageConfig = foundry.utils.mergeObject({
-      create: true,
-      data: {
-        flags: {
-          dnd5e: {
-            messageType: "roll",
-            roll: {
-              ability: config.ability,
-              type: type === "check" ? "ability" : "save"
-            }
-          }
-        },
-        flavor: _loc(
-          `DND5E.${type === "check" ? "Ability" : "Save"}PromptTitle`, { ability: abilityConfig?.label ?? "" }
-        ),
-        speaker: ChatMessage.getSpeaker({ actor: this })
-      }
-    }, message);
+    const messageData = {
+      flavor: _loc(`DND5E.${type === "check" ? "Ability" : "Save"}PromptTitle`, {
+        ability: abilityConfig?.label ?? ""
+      }),
+      speaker: ChatMessage.getSpeaker({ actor: this })
+    };
+    Object.assign(messageData, { type, system: { ability: config.ability } });
+
+    const messageConfig = foundry.utils.mergeObject({ create: true, data: messageData }, message);
 
     const rolls = await CONFIG.Dice.D20Roll.build(rollConfig, dialogConfig, messageConfig);
 
@@ -1668,14 +1623,8 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
 
     const messageConfig = foundry.utils.mergeObject({
       data: {
-        flags: {
-          dnd5e: {
-            roll: {
-              type: "death"
-            }
-          }
-        },
-        flavor: _loc("DND5E.DeathSavingThrow")
+        flavor: _loc("DND5E.DeathSavingThrow"),
+        system: { type: "death" }
       }
     }, message);
 
@@ -1686,71 +1635,34 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
     const details = { subject: this };
     const roll = rolls[0];
     const returnValue = oldFormat ? roll : rolls;
+    const card = roll.parent;
 
-    // Save success
-    if ( roll.total >= (roll.options.target ?? 10) ) {
-      let successes = (death.success || 0) + 1;
-
-      // Critical Success = revive with 1hp
-      if ( roll.isCritical ) {
-        details.updates = {
-          "system.attributes.death.success": 0,
-          "system.attributes.death.failure": 0,
-          "system.attributes.hp.value": 1
-        };
-        details.chatString = "DND5E.DeathSaveCriticalSuccess";
-      }
-
-      // 3 Successes = survive and reset checks
-      else if ( successes === 3 ) {
-        details.updates = {
-          "system.attributes.death.success": 0,
-          "system.attributes.death.failure": 0
-        };
-        details.chatString = "DND5E.DeathSaveSuccess";
-      }
-
-      // Increment successes
-      else details.updates = {"system.attributes.death.success": Math.clamp(successes, 0, 3)};
-    }
-
-    // Save failure
-    else {
-      let failures = (death.failure || 0) + (roll.isFumble ? 2 : 1);
-      details.updates = {"system.attributes.death.failure": Math.clamp(failures, 0, 3)};
-      if ( failures >= 3 ) {  // 3 Failures = death
-        details.chatString = "DND5E.DeathSaveFailure";
-      }
-    }
+    const { outcome, updates } = AttributesFields.applyDeathSaveResult(death, {
+      isSuccess: roll.total >= (roll.options.target ?? 10),
+      isCritical: roll.isCritical,
+      isFumble: roll.isFumble
+    });
+    details.updates = updates;
+    details.outcome = outcome;
 
     /**
      * A hook event that fires after a death saving throw has been rolled for an Actor, but before
      * updates have been performed.
      * @function dnd5e.rollDeathSave
      * @memberof hookEvents
-     * @param {D20Roll[]} rolls         The resulting rolls.
+     * @param {D20Roll[]} rolls                The resulting rolls.
      * @param {object} data
-     * @param {string} data.chatString  Localizable string displayed in the create chat message. If not set, then
-     *                                  no chat message will be displayed.
-     * @param {object} data.updates     Updates that will be applied to the actor as a result of this save.
-     * @param {Actor5e} data.subject    Actor for which the death saving throw has been rolled.
-     * @returns {boolean}               Explicitly return `false` to prevent updates from being performed.
+     * @param {DeathSaveOutcome} data.outcome  Terminal outcome rendered on the save card, if any.
+     * @param {object} data.updates            Updates that will be applied to the actor as a result of this save.
+     * @param {Actor5e} data.subject           Actor for which the death saving throw has been rolled.
+     * @returns {boolean}                      Explicitly return `false` to prevent updates from being performed.
      */
     if ( Hooks.call("dnd5e.rollDeathSave", rolls, details) === false ) return returnValue;
     if ( Hooks.call("dnd5e.rollDeathSaveV2", rolls, details) === false ) return returnValue;
 
+    const deltas = ActorDeltasField.getDeltas(this, { actor: details.updates, item: [] });
     if ( !foundry.utils.isEmpty(details.updates) ) await this.update(details.updates);
-
-    // Display success/failure chat message
-    let resultsMessage;
-    if ( details.chatString ) {
-      const chatData = {
-        content: _loc(details.chatString, { name: this.name }),
-        speaker: messageConfig.speaker ?? ChatMessage.getSpeaker({ actor: this })
-      };
-      ChatMessage.applyMode(chatData, messageConfig.rollMode ?? CONFIG.Dice.BasicRoll.getMessageMode());
-      resultsMessage = await ChatMessage.create(chatData);
-    }
+    if ( card ) await card.update({ "system.deltas": deltas, "system.outcome": details.outcome ?? null });
 
     /**
      * A hook event that fires after a death saving throw has been rolled and after changes have been applied.
@@ -1758,10 +1670,10 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
      * @memberof hookEvents
      * @param {D20Roll[]} rolls                  The resulting rolls.
      * @param {object} data
-     * @param {ChatMessage5e|void} data.message  The created results chat message.
+     * @param {ChatMessage5e|void} data.message  The save card chat message, if one was created.
      * @param {Actor5e} data.subject             Actor for which the death saving throw has been rolled.
      */
-    Hooks.callAll("dnd5e.postRollDeathSave", rolls, { message: resultsMessage, subject: this });
+    Hooks.callAll("dnd5e.postRollDeathSave", rolls, { message: card, subject: this });
 
     return returnValue;
   }
@@ -1806,7 +1718,9 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
       }
     }, dialog);
 
-    const messageConfig = foundry.utils.deepClone(message);
+    const messageConfig = foundry.utils.mergeObject({
+      data: { system: { type: "concentration" } }
+    }, message);
 
     const rolls = await this.rollSavingThrow(rollConfig, dialogConfig, messageConfig);
     if ( !rolls?.length ) return null;
@@ -2052,7 +1966,7 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
         speaker: ChatMessage.implementation.getSpeaker({actor: this}),
         flavor,
         title: `${flavor}: ${this.name}`,
-        "flags.dnd5e.roll": {type: "hitDie"}
+        type: "hitDie"
       }
     }, message);
 
@@ -2127,7 +2041,7 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
       title: `${flavor}: ${this.name}`,
       flavor,
       speaker: ChatMessage.implementation.getSpeaker({ actor: this }),
-      "flags.dnd5e.roll": { type: "hitPoints" }
+      type: "hitPoints"
     };
 
     /**
@@ -2180,7 +2094,7 @@ export default class Actor5e extends SystemDocumentMixin(Actor) {
       title: `${flavor}: ${this.name}`,
       flavor,
       speaker: ChatMessage.getSpeaker({ actor: this }),
-      "flags.dnd5e.roll": { type: "hitPoints" }
+      type: "hitPoints"
     };
 
     /**

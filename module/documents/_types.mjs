@@ -30,6 +30,13 @@
 /* -------------------------------------------- */
 
 /**
+ * @typedef ChatMessageEnrichmentOptions
+ * @property {boolean} [avatar=true]  Whether to inject an avatar image.
+ */
+
+/* -------------------------------------------- */
+
+/**
  * @typedef {ActorUpdatesDescription} CombatRecoveryResults
  * @property {BasicRoll[]} rolls  Any recovery rolls performed.
  */
@@ -90,6 +97,14 @@
  * @property {number} amount   Total amount of damage/healing across all damage types.
  * @property {number} temp     Total amount of temp HP across all damage types.
  * @property {number} tempMax  Total amount of temp max HP across all damage types.
+ */
+
+/**
+ * @typedef {"death"|"revive"|"stable"|null} DeathSaveOutcome
+ */
+
+/**
+ * @typedef {DeathSaveOutcome|"broken"} SaveOutcome
  */
 
 /* -------------------------------------------- */
@@ -155,10 +170,6 @@
  */
 
 /**
- * @typedef {RollDataOptions} ActivityRollDataOptions
- */
-
-/**
  * @typedef {RollData} ActorRollData
  * @property {object} flags                     Flags set on the actor.
  * @property {string} name                      Name of the actor.
@@ -178,8 +189,8 @@
 
 /**
  * @typedef {RollData} JournalEntryPageRollData
- * @param {object} flags          Flags set on the journal entry.
- * @param {string} name           Name of the journal entry.
+ * @property {object} flags       Flags set on the journal entry.
+ * @property {string} name        Name of the journal entry.
  * @property {object} page        Object containing the page's system data.
  * @property {object} page.flags  Flags set on the page.
  * @property {string} page.name   Name of the page.
@@ -192,24 +203,33 @@
 
 /**
  * @typedef RollDescription
- * @param {string} [ability]                Ability associated with a D20 roll.
- * @param {object} [attack]
- * @param {"spell"|"unarmed"|"weapon"} [attack.classification]  Source of the attack.
- * @param {WeaponAttackMode} [attack.mode]  Selected weapon attack mode.
- * @param {"melee"|"ranged"} [attack.type]  Whether this is a melee or ranged attack.
- * @param {boolean} [proficient]            Whether proficiency was added to the roll.
- * @param {string} [skill]                  ID of skill associated with the roll.
- * @param {string} [tool]                   ID of tool associated with the roll.
- * @param {string} type                     Type of roll being performed (e.g. "attack", "skill", "tool", etc.).
+ * @property {string} [ability]                Ability associated with a D20 roll.
+ * @property {object} [attack]
+ * @property {"spell"|"unarmed"|"weapon"} [attack.classification]  Source of the attack.
+ * @property {WeaponAttackMode} [attack.mode]  Selected weapon attack mode.
+ * @property {"melee"|"ranged"} [attack.type]  Whether this is a melee or ranged attack.
+ * @property {object} [damage]
+ * @property {string} [damage.type]            Type of damage being applied for a single damage part.
+ * @property {boolean} [proficient]            Whether proficiency was added to the roll.
+ * @property {string} [skill]                  ID of skill associated with the roll.
+ * @property {string} [tool]                   ID of tool associated with the roll.
+ * @property {string} type                     Type of roll being performed (e.g. "attack", "skill", "tool", etc.).
  */
 
 /**
  * @typedef RollDataOptions
- * @property {boolean} [deterministic]  Whether to force deterministic values for data properties that could
- *                                      be either a die term or a flat term.
- * @property {object} [data]            Arbitrary data assigned to the roll data object.
- * @property {boolean|object} [roll]               Configuration for a roll or true to indicate data is for a roll.
- * @property {WeaponAttackMode} [roll.attackMode]  Selected weapon attack mode.
+ * @property {boolean} [deterministic]             Whether to force deterministic values for data properties that
+ *                                                 could be either a die term or a flat term.
+ * @property {boolean|RollDataRollOptions} [roll]  Options describing the roll being performed, or true to indicate the
+ *                                                 data is for a roll without any further configuration.
+ */
+
+/**
+ * Roll-specific options that roll data preparation can respond to.
+ *
+ * @typedef RollDataRollOptions
+ * @property {string} [ability]               Ability used to calculate the roll modifier.
+ * @property {WeaponAttackMode} [attackMode]  Selected weapon attack mode.
  */
 
 /* -------------------------------------------- */

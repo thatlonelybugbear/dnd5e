@@ -91,11 +91,9 @@ export default class TransformActivity extends ActivityMixin(BaseTransformActivi
       ? this.effects.find(e => e._id === message.data?.flags?.dnd5e?.transform?.profile)?.getEffect()?.name
         ?? _loc("DND5E.TRANSFORM.NoForm") : null;
     return [{
-      label: form ?? _loc("DND5E.TRANSFORM.Action.Transform"),
-      icon: '<i class="fa-solid fa-frog" inert></i>',
-      dataset: {
-        action: "transformActor"
-      }
+      action: "transformActor",
+      icon: "fa-solid fa-frog",
+      label: { value: form ?? "DND5E.TRANSFORM.Action.Transform" }
     }].concat(super._usageChatButtons(message));
   }
 
@@ -103,7 +101,7 @@ export default class TransformActivity extends ActivityMixin(BaseTransformActivi
 
   /** @inheritDoc */
   shouldHideChatButton(button, message) {
-    if ( button.dataset.action === "transformActor" ) return !this.canTransform;
+    if ( button.action === "transformActor" ) return !this.canTransform;
     return super.shouldHideChatButton(button, message);
   }
 

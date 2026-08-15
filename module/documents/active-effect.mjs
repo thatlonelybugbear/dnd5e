@@ -15,6 +15,7 @@ const { NumberField, ObjectField, SchemaField, SetField, StringField } = foundry
  */
 
 const BONUS_SHIM_REGEX = new RegExp(/system\.(abilities|skills|tools)\.(\w+)\.bonuses\.(check|save)/);
+const ATTACK_ABILITY_SHIM_REGEX = new RegExp(/system\.activities\.\w+\.attack\.ability/);
 
 /**
  * Extend the base ActiveEffect class to implement system-specific logic.
@@ -95,7 +96,8 @@ export default class ActiveEffect5e extends DependentDocumentMixin(ActiveEffect)
     "system.bonuses.rsak.damage": { key: "system.rolls.damage.rsak.bonus" },
     "system.bonuses.abilities.check": { key: "system.rolls.ability.check.bonus" },
     "system.bonuses.abilities.save": { key: "system.rolls.ability.save.bonus" },
-    "system.bonuses.abilities.skill": { key: "system.rolls.ability.skill.bonus" }
+    "system.bonuses.abilities.skill": { key: "system.rolls.ability.skill.bonus" },
+    "activities[attack].attack.ability": { key: "activities[attack].attack.abilities" }
   };
 
   /* -------------------------------------------- */
@@ -469,6 +471,9 @@ export default class ActiveEffect5e extends DependentDocumentMixin(ActiveEffect)
    */
   _applyChangeShim(change) {
     let shim = ActiveEffect5e.SHIM_FIELDS[change.key];
+    if ( !shim && ATTACK_ABILITY_SHIM_REGEX.test(change.key) ) {
+      shim = { key: change.key.replace(/\.ability$/, ".abilities") };
+    }
     if ( !shim ) {
       const [, category, key, type] = change.key.match(BONUS_SHIM_REGEX) ?? [];
       if ( !category ) return change;
@@ -851,14 +856,30 @@ export default class ActiveEffect5e extends DependentDocumentMixin(ActiveEffect)
     await super._onDeleteOperation(documents, operation, user);
     if ( game.user === game.users.activeGM ) {
       const dependents = new Map();
+      const pseudo = new Map();
       for ( const effect of documents ) {
         for ( const dependent of effect.getDependents() ) {
-          dependents.getOrInsert(dependent.parent, new Set()).add(dependent.id);
+          let { collectionName, documentName, parent } = dependent;
+          const descriptor = { collectionName, documentName, ids: new Set() };
+          if ( !(dependent instanceof foundry.abstract.Document) ) {
+            parent = dependent.item;
+            pseudo.getOrInsert(parent, descriptor).ids.add(dependent.id);
+            continue;
+          }
+          dependents.getOrInsert(parent, descriptor).ids.add(dependent.id);
         }
       }
-      const batch = dependents.entries()
-        .map(([parent, ids]) => ({ action: "delete", documentName: "ActiveEffect", ids: [...ids], parent }))
-        .toArray();
+      const batch = [
+        ...dependents.entries().map(([parent, { documentName, ids }]) => {
+          return { documentName, parent, action: "delete", ids: Array.from(ids) };
+        }).toArray(),
+        ...pseudo.entries().map(([parent, { collectionName, ids }]) => {
+          return {
+            action: "update", documentName: "Item", parent: parent.parent,
+            updates: [{ _id: parent.id, ...Object.fromEntries(ids.map(id => [`system.${collectionName}.${id}`, _del])) }]
+          };
+        })
+      ];
       if ( batch.length ) await foundry.documents.modifyBatch(batch);
     }
 
@@ -1056,8 +1077,8 @@ export default class ActiveEffect5e extends DependentDocumentMixin(ActiveEffect)
    */
   static async endConcentrationDialog(actor, effects) {
     const choices = effects.reduce((acc, effect) => {
-      const data = effect.getFlag("dnd5e", "item");
-      acc[effect.id] = data?.name ?? actor.items.get(data?.id)?.name ?? _loc("DND5E.CONCENTRATION.NoSource");
+      const item = effect.getFlag("dnd5e", "item");
+      acc[effect.id] = item?.data?.name ?? actor.items.get(item?.id)?.name ?? _loc("DND5E.CONCENTRATION.NoSource");
       return acc;
     }, {});
     const source = await ActiveEffect5e.#promptRemoveSource({
@@ -1252,6 +1273,7 @@ export default class ActiveEffect5e extends DependentDocumentMixin(ActiveEffect)
     const context = {
       ...change,
       typeLabel: _loc(ActiveEffect.CHANGE_TYPES[change.type]?.label),
+      value: foundry.utils.isPlainObject(change.value) ? JSON.stringify(change.value, null, 2) : change.value,
       ...((await this.system.getSheetChangeContext?.(change)) ?? {})
     };
     context.name ||= change.key;
@@ -1275,7 +1297,7 @@ export default class ActiveEffect5e extends DependentDocumentMixin(ActiveEffect)
       content: await foundry.applications.handlebars.renderTemplate(
         "systems/dnd5e/templates/effects/parts/effect-tooltip.hbs", context
       ),
-      classes: ["dnd5e2", "dnd5e-tooltip", "effect-tooltip", "themed", "theme-light"]
+      classes: ["dnd5e2", "dnd5e-tooltip", "effect-tooltip"]
     };
   }
 

@@ -5,7 +5,7 @@ import { DamageData } from "../shared/damage-field.mjs";
 const { BooleanField } = foundry.data.fields;
 
 /**
- * @import { EnchantmentActiveEffectSystemData } from "./types.mjs";
+ * @import { EnchantmentActiveEffectSystemData } from "./_types.mjs";
  */
 
 /**
@@ -87,8 +87,8 @@ export default class EnchantmentData extends ActiveEffectDataModel {
     switch ( change.key ) {
       case "system.ability":
         for ( const activity of item.system.activities?.getByTypes("attack") ?? [] ) {
-          changes[`system.activities.${activity.id}.attack.ability`] = applyField(
-            activity, { ...change, key: "attack.ability" }
+          changes[`system.activities.${activity.id}.attack.abilities`] = applyField(
+            activity, { ...change, key: "attack.abilities" }
           );
         }
         return false;

@@ -3,7 +3,9 @@ import ActivityUsageDialog from "../../applications/activity/activity-usage-dial
 import TemplatePlacement from "../../canvas/template-placement.mjs";
 import { ConsumptionError } from "../../data/activity/fields/consumption-targets-field.mjs";
 import { ActorDeltasField } from "../../data/chat-message/fields/deltas-field.mjs";
-import { formatNumber, getSceneTargets, getTargetDescriptors, localizeSchema } from "../../utils.mjs";
+import TargetsField from "../../data/chat-message/fields/targets-field.mjs";
+import PropertyField from "../../data/shared/property-field.mjs";
+import { formatNumber, generateIcon, getSceneTargets, localizeSchema } from "../../utils.mjs";
 import AppliedRules from "../applied-rules.mjs";
 import DependentDocumentMixin from "../mixins/dependent.mjs";
 import PseudoDocumentMixin from "../mixins/pseudo-document.mjs";
@@ -35,14 +37,15 @@ export default function ActivityMixin(Base) {
      * @type {Readonly<ActivityMetadata>}
      */
     static metadata = Object.freeze({
-      name: "Activity",
+      collection: "activities",
       label: "DOCUMENT.DND5E.Activity",
+      name: "Activity",
       sheetClass: ActivitySheet,
       usage: {
         actions: {},
         applyEffectsInChat: true,
-        chatCard: "systems/dnd5e/templates/chat/activity-card.hbs",
-        dialog: ActivityUsageDialog
+        dialog: ActivityUsageDialog,
+        messageType: "usage"
       }
     });
 
@@ -143,14 +146,19 @@ export default function ActivityMixin(Base) {
     /* -------------------------------------------- */
 
     /**
-     * Create the data added to messages flags.
-     * @type {object}
+     * References to this activity and its item, stored on the messages it creates.
+     * @type {{ activity: SourceReferenceData, item: ItemReferenceData }}
      */
-    get messageFlags() {
+    get messageSources() {
+      const { item } = this;
       return {
-        activity: { type: this.type, id: this.id, uuid: this.uuid },
-        item: { type: this.item.type, id: this.item.id, uuid: this.item.uuid },
-        targets: getTargetDescriptors()
+        activity: {
+          id: this.id, img: this.img, name: this.name, type: this.type, uuid: this.uuid
+        },
+        item: {
+          compendiumSource: item?._stats?.compendiumSource, id: item?.id, img: item?.img,
+          name: item?.name, type: item?.type, uuid: item?.uuid
+        }
       };
     }
 
@@ -212,9 +220,7 @@ export default function ActivityMixin(Base) {
       const messageConfig = foundry.utils.mergeObject({
         create: true,
         data: {
-          flags: {
-            dnd5e: this.messageFlags
-          }
+          system: { targets: TargetsField.getDescriptors() }
         },
         hasConsumption: usageConfig.hasConsumption
       }, message);
@@ -507,10 +513,7 @@ export default function ActivityMixin(Base) {
         usageConfig.scaling = Math.max(0, levelingFlag.value - levelingFlag.base);
       } else if ( this.isSpell ) {
         const level = this.actor.system.spells?.[usageConfig.spell?.slot]?.level;
-        if ( level ) {
-          usageConfig.scaling = level - item.system.level;
-          foundry.utils.setProperty(messageConfig, "data.system.spellLevel", level);
-        }
+        if ( level ) usageConfig.scaling = level - item.system.level;
       }
 
       if ( usageConfig.scaling ) {
@@ -675,46 +678,6 @@ export default function ActivityMixin(Base) {
     /* -------------------------------------------- */
 
     /**
-     * Prepare the context used to render the usage chat card.
-     * @param {ActivityMessageConfiguration} message  Configuration info for the created message.
-     * @returns {object}
-     * @protected
-     */
-    async _usageChatContext(message) {
-      const data = await this.item.system.getCardData({ activity: this });
-      const properties = [...(data.tags ?? []), ...(data.properties ?? [])];
-      const supplements = [];
-      if ( this.activation.condition ) {
-        supplements.push(`<strong>${_loc("DND5E.Trigger")}</strong> ${this.activation.condition}`);
-      }
-      if ( data.materials?.value ) {
-        supplements.push(`<strong>${_loc("DND5E.Materials")}</strong> ${data.materials.value}`);
-      }
-      const buttons = this._usageChatButtons(message);
-
-      // Include spell level in the subtitle.
-      if ( this.item.type === "spell" ) {
-        const spellLevel = foundry.utils.getProperty(message, "data.system.spellLevel");
-        const { spellLevels, spellSchools } = CONFIG.DND5E;
-        data.subtitle = [spellLevels[spellLevel], spellSchools[this.item.system.school]?.label].filterJoin(" &bull; ");
-      }
-
-      return {
-        activity: this,
-        actor: this.item.actor,
-        item: this.item,
-        token: this.item.actor?.token,
-        buttons: buttons.length ? buttons : null,
-        description: data.description,
-        properties: properties.length ? properties : null,
-        subtitle: this.description.chatFlavor || data.subtitle,
-        supplements
-      };
-    }
-
-    /* -------------------------------------------- */
-
-    /**
      * Apply any final modifications to message config immediately before message is created.
      * @param {ActivityUseConfiguration} usageConfig        Configuration data for the activation.
      * @param {ActivityMessageConfiguration} messageConfig  Configuration data for the chat message.
@@ -741,25 +704,19 @@ export default function ActivityMixin(Base) {
       const buttons = [];
 
       if ( this.target?.template?.type ) buttons.push({
-        label: _loc("DND5E.TARGET.Action.PlaceTemplate"),
-        icon: '<i class="fas fa-bullseye" inert></i>',
-        dataset: {
-          action: "placeTemplate"
-        }
+        action: "placeTemplate",
+        icon: "fa-solid fa-bullseye",
+        label: { value: "DND5E.TARGET.Action.PlaceTemplate" }
       });
 
       if ( message.hasConsumption ) buttons.push({
-        label: _loc("DND5E.CONSUMPTION.Action.ConsumeResource"),
-        icon: '<i class="fa-solid fa-cubes-stacked" inert></i>',
-        dataset: {
-          action: "consumeResource"
-        }
+        action: "consumeResource",
+        icon: "fa-solid fa-cubes-stacked",
+        label: { value: "DND5E.CONSUMPTION.Action.ConsumeResource" }
       }, {
-        label: _loc("DND5E.CONSUMPTION.Action.RefundResource"),
-        icon: '<i class="fa-solid fa-clock-rotate-left"></i>',
-        dataset: {
-          action: "refundResource"
-        }
+        action: "refundResource",
+        icon: "fa-solid fa-clock-rotate-left",
+        label: { value: "DND5E.CONSUMPTION.Action.RefundResource" }
       });
 
       return buttons;
@@ -769,12 +726,12 @@ export default function ActivityMixin(Base) {
 
     /**
      * Determine whether the provided button in a chat message should be visible.
-     * @param {HTMLButtonElement} button  The button to check.
-     * @param {ChatMessage5e} message     Chat message containing the button.
+     * @param {ActivityUsageChatButton} button  Descriptor for the button to check.
+     * @param {ChatMessage5e} message           Chat message containing the button.
      * @returns {boolean}
      */
     shouldHideChatButton(button, message) {
-      switch ( button.dataset.action ) {
+      switch ( button.action ) {
         case "consumeResource": return !!message.system.deltas;
         case "refundResource": return !message.system.deltas;
         case "placeTemplate": return !game.user.can("REGION_CREATE") || !game.canvas.scene;
@@ -791,17 +748,23 @@ export default function ActivityMixin(Base) {
      * @protected
      */
     async _createUsageMessage(message) {
-      const context = await this._usageChatContext(message);
-      const messageConfig = foundry.utils.mergeObject({
-        data: {
-          content: await foundry.applications.handlebars.renderTemplate(this.metadata.usage.chatCard, context),
-          flags: {
-            core: { canPopout: true }
-          },
-          speaker: ChatMessage.implementation.getSpeaker({ actor: this.item.actor }),
-          title: `${this.item.name} - ${this.name}`,
-          type: "usage"
+      const { messageType } = this.metadata.usage;
+      const data = {
+        flags: {
+          core: { canPopout: true }
         },
+        speaker: ChatMessage.implementation.getSpeaker({ actor: this.item.actor }),
+        system: await this.item.system.getCardData({ activity: this }),
+        title: `${this.item.name} - ${this.name}`,
+        type: messageType
+      };
+      const buttons = this._usageChatButtons(message);
+      this.#migrateLegacyChatButtons(buttons);
+      if ( buttons.length ) foundry.utils.setProperty(data, "system.buttons", buttons);
+      const legacyContent = await this.#legacyUsageContent(message);
+      if ( legacyContent ) data.content = legacyContent;
+      const messageConfig = foundry.utils.mergeObject({
+        data,
         rollMode: CONFIG.Dice.BasicRoll.getMessageMode()
       }, message);
 
@@ -898,14 +861,9 @@ export default function ActivityMixin(Base) {
         create: true,
         data: {
           flavor: `${this.item.name} - ${this.damageFlavor}`,
-          flags: {
-            dnd5e: {
-              ...this.messageFlags,
-              messageType: "roll",
-              roll: { type: "damage" }
-            }
-          },
-          speaker: ChatMessage.getSpeaker({ actor: this.actor })
+          speaker: ChatMessage.getSpeaker({ actor: this.actor }),
+          system: { ...this.messageSources, targets: TargetsField.getDescriptors() },
+          type: "damage"
         }
       }, message);
 
@@ -972,20 +930,6 @@ export default function ActivityMixin(Base) {
     /* -------------------------------------------- */
 
     /**
-     * Activate listeners on a chat message.
-     * @param {ChatMessage} message  Associated chat message.
-     * @param {HTMLElement} html     Element in the chat log.
-     */
-    activateChatListeners(message, html) {
-      html.addEventListener("click", event => {
-        const target = event.target.closest("[data-action]");
-        if ( target ) this.#onChatAction(event, target, message);
-      });
-    }
-
-    /* -------------------------------------------- */
-
-    /**
      * Construct context menu options for this Activity.
      * @returns {ContextMenuEntry[]}
      */
@@ -1045,15 +989,14 @@ export default function ActivityMixin(Base) {
      * @param {HTMLElement} target     The capturing HTML element which defined a [data-action].
      * @param {ChatMessage5e} message  Message associated with the activation.
      */
-    async #onChatAction(event, target, message) {
+    async onChatAction(event, target, message) {
       const consumed = this.createConsumedFlag(message.getAssociatedActor(), message.system.deltas);
       const scaling = message.system.scaling ?? 0;
       const item = (consumed || scaling) ? this.item.clone({
         "flags.dnd5e": { consumed, scaling }
       }, { keepId: true }) : this.item;
       const activity = item.system.activities.get(this.id);
-
-      const action = target.dataset.action;
+      const action = target.dataset.action ?? message.system.getButton(target)?.action;
       const handler = this.metadata.usage?.actions?.[action];
       target.disabled = true;
       try {
@@ -1062,7 +1005,7 @@ export default function ActivityMixin(Base) {
         else if ( action === "refundResource" ) await this.#refundResource(event, target, message);
         else if ( action === "placeTemplate" ) await this.#placeTemplate();
         else await activity._onChatAction(event, target, message);
-      } catch(err) {
+      } catch (err) {
         Hooks.onError("Activity#onChatAction", err, { log: "error", notify: "error" });
       } finally {
         target.disabled = false;
@@ -1290,6 +1233,133 @@ export default function ActivityMixin(Base) {
       return Object.entries(CONFIG.DND5E.activityTypes)
         .filter(([, c]) => (c.configurable !== false) && c.documentClass.availableForItem(parent))
         .map(([k]) => k);
+    }
+
+    /* -------------------------------------------- */
+    /*  Deprecations                                */
+    /* -------------------------------------------- */
+
+    /**
+     * @deprecated
+     * @since 6.0.0
+     * @ignore
+     */
+    activateChatListeners(message, html) {}
+
+    /* -------------------------------------------- */
+
+    /**
+     * @deprecated
+     * @since 6.0.0
+     * @ignore
+     */
+    _activateLegacyChatListeners(message, html) {
+      if ( foundry.utils.getDefiningClass(this, "activateChatListeners") === Activity ) return;
+      foundry.utils.logCompatibilityWarning(
+        `The "${this.type}" activity defines "activateChatListeners". Register chat card actions through the `
+        + '"usage.actions" metadata or "_onChatAction" instead.',
+        { since: "DnD5e 6.0", until: "DnD5e 6.2", once: true }
+      );
+      this.activateChatListeners(message, html);
+    }
+
+    /* -------------------------------------------- */
+
+    /**
+     * @deprecated
+     * @since 6.0.0
+     * @ignore
+     */
+    async _usageChatContext(message) {
+      const data = await this.item.system.getCardData({ activity: this });
+      const properties = PropertyField.getLabels(data.properties.filter(p => !p.identity), {
+        ...data, properties: data.item.properties
+      });
+      const supplements = [];
+      if ( this.activation.condition ) {
+        supplements.push(`<strong>${_loc("DND5E.Trigger")}</strong> ${this.activation.condition}`);
+      }
+      if ( data.materials ) {
+        supplements.push(`<strong>${_loc("DND5E.Materials")}</strong> ${data.materials}`);
+      }
+      const buttons = this._usageChatButtons(message);
+      this.#migrateLegacyChatButtons(buttons);
+      const legacy = buttons.map(button => {
+        const label = _loc(button.label?.value ?? "");
+        return {
+          ...button,
+          dataset: { ...button.dataset, action: button.action },
+          icon: generateIcon(button.icon)?.outerHTML ?? "",
+          label: button.label?.hidden
+            ? `<span class="visible-dc">${label}</span><span class="hidden-dc">${_loc(button.label.hidden)}</span>`
+            : label
+        };
+      });
+
+      return {
+        activity: this,
+        actor: this.item.actor,
+        item: this.item,
+        token: this.item.actor?.token,
+        buttons: legacy.length ? legacy : null,
+        concealed: data.concealed,
+        description: data.description,
+        properties: properties.length ? properties : null,
+        subtitle: this.description.chatFlavor || data.subtitle.filterJoin(" • "),
+        supplements
+      };
+    }
+
+    /* -------------------------------------------- */
+
+    /**
+     * @deprecated
+     * @since 6.0.0
+     * @ignore
+     */
+    #migrateLegacyChatButtons(buttons) {
+      const legacy = buttons.filter(b => !b.action || (typeof b.label === "string") || b.icon?.startsWith("<"));
+      if ( !legacy.length ) return;
+      foundry.utils.logCompatibilityWarning(
+        `The "${this.type}" activity supplies chat buttons in a legacy format. Buttons must now define an "action", `
+        + 'a "label" object, and an "icon" given as FontAwesome classes or an image path.',
+        { since: "DnD5e 6.0", until: "DnD5e 6.2", once: true }
+      );
+      for ( const button of legacy ) {
+        button.action ??= button.dataset?.action;
+        if ( typeof button.label === "string" ) {
+          const label = foundry.utils.parseHTML(`<div>${button.label}</div>`);
+          const dc = label.querySelector(".visible-dc");
+          button.label = dc
+            ? { hidden: label.querySelector(".hidden-dc")?.textContent.trim(), value: dc.textContent.trim() }
+            : { value: button.label };
+        }
+        if ( button.icon?.startsWith("<") ) {
+          const icon = foundry.utils.parseHTML(button.icon);
+          button.icon = icon?.dataset?.src ?? icon?.getAttribute?.("src") ?? icon?.className ?? "";
+        }
+      }
+    }
+
+    /* -------------------------------------------- */
+
+    /**
+     * @deprecated
+     * @since 6.0.0
+     * @ignore
+     */
+    async #legacyUsageContent(message) {
+      const { chatCard } = this.metadata.usage;
+      if ( !chatCard
+        && (foundry.utils.getDefiningClass(this, "_usageChatContext") === Activity) ) return;
+      foundry.utils.logCompatibilityWarning(
+        `The "${this.type}" activity supplies a legacy usage card. "usage.chatCard" and "_usageChatContext" are `
+        + 'deprecated. Set "message.data.content" in "_createUsageMessage" to keep custom card content.',
+        { since: "DnD5e 6.0", until: "DnD5e 6.2", once: true }
+      );
+      return foundry.applications.handlebars.renderTemplate(
+        chatCard ?? "systems/dnd5e/templates/chat/activity-card.hbs", await this._usageChatContext(message)
+      );
     }
   }
   return Activity;

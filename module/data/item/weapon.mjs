@@ -242,9 +242,7 @@ export default class WeaponData extends ItemDataModel.mixin(
    */
   get chatProperties() {
     return [
-      this.type.label,
-      CONFIG.DND5E.weaponMasteries[this.mastery]?.label,
-      this.isMountable ? (this.parent.labels?.armor ?? null) : null
+      { type: "text", text: this.type.label }, { type: "mastery", mastery: this.mastery }, ...this.cardProperties
     ];
   }
 
@@ -255,9 +253,7 @@ export default class WeaponData extends ItemDataModel.mixin(
    * @type {string[]}
    */
   get cardProperties() {
-    return [
-      this.isMountable ? (this.parent.labels?.armor ?? null) : null
-    ];
+    return (this.isMountable && this.armor.value) ? [{ type: "ac", value: this.armor.value }] : [];
   }
 
   /* -------------------------------------------- */
@@ -268,9 +264,9 @@ export default class WeaponData extends ItemDataModel.mixin(
     if ( !availableAbilities ) return null;
     if ( availableAbilities.size === 1 ) return availableAbilities.first();
     const abilities = this.parent?.actor?.system.abilities ?? {};
-    return availableAbilities.reduce((largest, ability) =>
-      (abilities[ability]?.mod ?? -Infinity) > (abilities[largest]?.mod ?? -Infinity) ? ability : largest
-    , availableAbilities.first());
+    return availableAbilities.reduce((largest, ability) => {
+      return (abilities[ability]?.mod ?? -Infinity) > (abilities[largest]?.mod ?? -Infinity) ? ability : largest;
+    }, availableAbilities.first());
   }
 
   /* -------------------------------------------- */
@@ -278,6 +274,13 @@ export default class WeaponData extends ItemDataModel.mixin(
   /** @override */
   get criticalThreshold() {
     return this.parent?.actor?.flags.dnd5e?.weaponCriticalThreshold ?? Infinity;
+  }
+
+  /* -------------------------------------------- */
+
+  /** @override */
+  get hasProficiency() {
+    return true;
   }
 
   /* -------------------------------------------- */
@@ -369,13 +372,6 @@ export default class WeaponData extends ItemDataModel.mixin(
     const improvised = (this.type.value === "improv") && !!actor.getFlag("dnd5e", "tavernBrawlerFeat");
     const isProficient = natural || improvised || actorProfs.has(itemProf) || actorProfs.has(this.type.baseItem);
     return Number(isProficient);
-  }
-
-  /* -------------------------------------------- */
-
-  /** @inheritDoc */
-  get tooltipSubtitle() {
-    return [...super.tooltipSubtitle, CONFIG.DND5E.weaponMasteries[this.mastery]?.label];
   }
 
   /* -------------------------------------------- */
@@ -507,6 +503,36 @@ export default class WeaponData extends ItemDataModel.mixin(
     if ( this.hasRange ) labels.range = !long || (long === value) ? formatLength(value, units)
       : `${formatNumber(value)}/${formatLength(long, units)}`;
     if ( reach ) labels.reach = _loc("DND5E.RANGE.Formatted.Reach", { reach: formatLength(reach, units) });
+  }
+
+  /* -------------------------------------------- */
+
+  /** @inheritDoc */
+  async getCardData(options) {
+    const context = await super.getCardData(options);
+    context.mastery = this.mastery;
+    const masteryLabel = CONFIG.DND5E.weaponMasteries[this.mastery]?.label;
+    if ( masteryLabel ) context.subtitle.push(masteryLabel);
+
+    const identity = [{ type: "label", label: CONFIG.Item.typeLabels.weapon, identity: true }];
+    const category = CONFIG.DND5E.weaponProficienciesMap[this.type.value];
+    if ( category ) identity.push({ type: "weapon:category", category, identity: true });
+    else if ( this.type.label ) identity.push({ type: "text", text: this.type.label, identity: true });
+    const cls = CONFIG.DND5E.weaponTypeMap[this.type.value];
+    if ( cls ) identity.push({ type: "weapon:class", class: cls, identity: true });
+    if ( this.mastery ) identity.push({ type: "mastery", mastery: this.mastery, identity: true });
+    context.properties = [...identity, ...context.properties.filter(p => !p.identity)];
+
+    return context;
+  }
+
+  /* -------------------------------------------- */
+
+  /** @inheritDoc */
+  getUsageData(options) {
+    const usage = super.getUsageData(options);
+    usage.range ??= this.range;
+    return usage;
   }
 
   /* -------------------------------------------- */

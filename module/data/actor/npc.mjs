@@ -3,6 +3,7 @@ import Proficiency from "../../documents/actor/proficiency.mjs";
 import * as Trait from "../../documents/actor/trait.mjs";
 import { getRulesVersion } from "../../enrichers.mjs";
 import { defaultUnits, formatCR, formatLength, formatNumber, getPluralRules, splitSemicolons } from "../../utils.mjs";
+import { ActorDeltasField } from "../chat-message/fields/deltas-field.mjs";
 import FormulaField from "../fields/formula-field.mjs";
 import CreatureTypeField from "../shared/creature-type-field.mjs";
 import MovementField from "../shared/movement-field.mjs";
@@ -436,6 +437,7 @@ export default class NPCData extends CreatureTemplate {
     AttributesFields.prepareExhaustionLevel.call(this);
     AttributesFields.prepareInitiative.call(this, rollData);
     AttributesFields.prepareMovement.call(this, rollData);
+    AttributesFields.preparePrice.call(this);
     SourceField.prepareData.call(this.source, this.parent._stats?.compendiumSource ?? this.parent.uuid);
     TraitsFields.prepareLanguages.call(this);
     TraitsFields.prepareResistImmune.call(this);
@@ -569,10 +571,30 @@ export default class NPCData extends CreatureTemplate {
    */
   async resistSave(message) {
     if ( this.resources.legres.value === 0 ) throw new Error("No legendary resistances remaining.");
-    if ( message.flags.dnd5e?.roll?.type !== "save" ) throw new Error("Chat message must contain a save roll.");
-    if ( message.flags.dnd5e?.roll?.forceSuccess ) throw new Error("Save has already been resisted.");
-    await this.parent.update({ "system.resources.legres.spent": this.resources.legres.spent + 1 });
-    await message.setFlag("dnd5e", "roll.forceSuccess", true);
+    if ( message.type !== "save" ) throw new Error("Chat message must contain a save roll.");
+    if ( message.system.resisted ) throw new Error("Save has already been resisted.");
+    const actorUpdate = { "system.resources.legres.spent": this.resources.legres.spent + 1 };
+    const messageUpdate = { _id: message.id, "system.resisted": true };
+
+    // Legendary resistance turns the failed save into a success: revert this save's failure and credit a success
+    // (which may stabilize the creature at three).
+    if ( message.system.ability === "death" ) {
+      const priorFailure = message.system.deltas?.actor
+        ?.find(d => d.keyPath === "system.attributes.death.failure")?.delta ?? 0;
+      const failure = this.attributes.death.failure - priorFailure;
+      const { outcome, updates } = AttributesFields.applyDeathSaveResult({
+        failure, success: this.attributes.death.success
+      }, { isSuccess: true });
+      updates["system.attributes.death.failure"] ??= failure;
+      Object.assign(actorUpdate, updates);
+      messageUpdate["system.deltas"] = _replace(ActorDeltasField.getDeltas(this.parent, { actor: updates, item: [] }));
+      messageUpdate["system.outcome"] = outcome;
+    }
+
+    await this.parent.performBulkUpdate({
+      actor: actorUpdate,
+      operations: [{ action: "update", documentName: "ChatMessage", updates: [messageUpdate] }]
+    });
   }
 
   /* -------------------------------------------- */
@@ -724,7 +746,7 @@ export default class NPCData extends CreatureTemplate {
         // Saves (e.g. `Dex +7, Con +15, Wis +10, Cha +12`)
         saves: formatter.format(
           Object.entries(CONFIG.DND5E.abilities)
-            .filter(([k]) => this.abilities[k].saveProf.multiplier !== 0)
+            .filter(([k]) => this.abilities[k].save.prof.multiplier !== 0)
             .map(([k, { abbreviation }]) =>
               `${abbreviation.capitalize()} ${formatNumber(this.abilities[k].save.value, { signDisplay: "always" })}`
             )

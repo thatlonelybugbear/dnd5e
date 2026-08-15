@@ -1,3 +1,5 @@
+import TargetsField from "./data/chat-message/fields/targets-field.mjs";
+
 /**
  * @import { TargetDescriptor5e, UnitConfiguration } from "./_types.mjs";
  * @import { RollData } from "./documents/_types.mjs";
@@ -759,19 +761,16 @@ export function loadingTooltip({ uuid, passive=false }={}) {
 /**
  * Grab the targeted tokens and return relevant information on them.
  * @param {Iterable<Token5e|TokenDocument5e>} [tokens]  Tokens to describe. Defaults to the user's current targets.
- * @returns {TargetDescriptor5e[]}
+ * @returns {(TargetDescriptor5e & { uuid: string })[]}
+ * @deprecated
+ * @since 6.0.0
  */
 export function getTargetDescriptors(tokens=game.user.targets) {
-  const targets = new Map();
-  for ( const token of tokens ) {
-    const { name } = token;
-    const { img, system, uuid, statuses } = token.actor ?? {};
-    if ( uuid ) {
-      const ac = statuses.has("coverTotal") ? null : system.attributes?.ac?.value;
-      targets.set(uuid, { name, img, uuid, ac: ac ?? null });
-    }
-  }
-  return Array.from(targets.values());
+  foundry.utils.logCompatibilityWarning(
+    "The getTargetDescriptors helper has been deprecated. Please use `TargetsField.getDescriptors` instead.",
+    { since: "DnD5e 6.0", until: "DnD5e 6.2" }
+  );
+  return TargetsField.getDescriptors(tokens).map(t => ({ ...t, uuid: t.actor }));
 }
 
 /* -------------------------------------------- */
@@ -996,6 +995,10 @@ export async function preloadHandlebarsTemplates() {
     // Chat Message Partials
     "systems/dnd5e/templates/chat/parts/card-activities.hbs",
     "systems/dnd5e/templates/chat/parts/card-deltas.hbs",
+    "systems/dnd5e/templates/chat/parts/card-face.hbs",
+    "systems/dnd5e/templates/chat/parts/damage-breakdown.hbs",
+    "systems/dnd5e/templates/chat/parts/roll.hbs",
+    "systems/dnd5e/templates/chat/parts/targets-tray.hbs",
 
     // Item Sheet Partials
     "systems/dnd5e/templates/items/details/details-background.hbs",

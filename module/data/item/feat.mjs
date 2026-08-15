@@ -155,7 +155,7 @@ export default class FeatData extends ItemDataModel.mixin(
    * @type {string[]}
    */
   get chatProperties() {
-    return [this.requirements];
+    return this.cardProperties;
   }
 
   /* -------------------------------------------- */
@@ -165,7 +165,7 @@ export default class FeatData extends ItemDataModel.mixin(
    * @type {string[]}
    */
   get cardProperties() {
-    return [this.requirements];
+    return this.requirements ? [{ type: "text", text: this.requirements }] : [];
   }
 
   /* -------------------------------------------- */
@@ -178,6 +178,13 @@ export default class FeatData extends ItemDataModel.mixin(
   get isEnchantmentSource() {
     return CONFIG.DND5E.featureTypes[this.type?.value]?.subtypes?.[this.type?.subtype]
       && (this.type?.subtype in CONFIG.DND5E.featureTypes.enchantment.subtypes);
+  }
+
+  /* -------------------------------------------- */
+
+  /** @override */
+  get hasProficiency() {
+    return true;
   }
 
   /* -------------------------------------------- */

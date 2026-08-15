@@ -138,8 +138,7 @@
       overflow: hidden;
       padding-right: .5rem;
       margin-right: -.5rem;
-      scrollbar-width: thin;
-      scrollbar-color: var(--dnd5e-color-gold) transparent;
+      .scrollbar(var(--dnd5e-color-gold));
 
       table { display: none; }
 
@@ -173,12 +172,6 @@
         overflow-y: scroll;
         &.overflowing { mask-image: unset; }
       }
-    }
-
-    .pill {
-      font-size: var(--font-size-10);
-      padding: .1875rem .375rem;
-      line-height: 1;
     }
   }
 

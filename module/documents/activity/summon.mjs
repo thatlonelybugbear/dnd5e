@@ -80,11 +80,9 @@ export default class SummonActivity extends ActivityMixin(BaseSummonActivityData
   _usageChatButtons(message) {
     if ( !this.availableProfiles.length ) return super._usageChatButtons(message);
     return [{
-      label: _loc("DND5E.SUMMON.Action.Summon"),
-      icon: '<i class="fa-solid fa-spaghetti-monster-flying" inert></i>',
-      dataset: {
-        action: "placeSummons"
-      }
+      action: "placeSummons",
+      icon: "fa-solid fa-spaghetti-monster-flying",
+      label: { value: "DND5E.SUMMON.Action.Summon" }
     }].concat(super._usageChatButtons(message));
   }
 
@@ -92,7 +90,7 @@ export default class SummonActivity extends ActivityMixin(BaseSummonActivityData
 
   /** @inheritDoc */
   shouldHideChatButton(button, message) {
-    if ( button.dataset.action === "placeSummons" ) return !this.canSummon;
+    if ( button.action === "placeSummons" ) return !this.canSummon;
     return super.shouldHideChatButton(button, message);
   }
 

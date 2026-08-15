@@ -1,10 +1,8 @@
 import AttackSheet from "../../applications/activity/attack-sheet.mjs";
 import AttackRollConfigurationDialog from "../../applications/dice/attack-configuration-dialog.mjs";
 import BaseAttackActivityData from "../../data/activity/attack-data.mjs";
-import AdvantageModeField from "../../data/fields/advantage-mode-field.mjs";
+import TargetsField from "../../data/chat-message/fields/targets-field.mjs";
 import D20RollModificationField from "../../data/shared/d20-roll-modification-field.mjs";
-import { getTargetDescriptors } from "../../utils.mjs";
-import AppliedRules from "../applied-rules.mjs";
 import ActivityMixin from "./mixin.mjs";
 
 /**
@@ -51,18 +49,14 @@ export default class AttackActivity extends ActivityMixin(BaseAttackActivityData
   /** @override */
   _usageChatButtons(message) {
     const buttons = [{
-      label: _loc("DND5E.Attack"),
-      icon: '<i class="dnd5e-icon" data-src="systems/dnd5e/icons/svg/trait-weapon-proficiencies.svg" inert></i>',
-      dataset: {
-        action: "rollAttack"
-      }
+      action: "rollAttack",
+      icon: "fa-solid fa-sword",
+      label: { value: "DND5E.Attack" }
     }];
     if ( this.damage.parts.length || this.item.system.properties?.has("amm") ) buttons.push({
-      label: _loc("DND5E.Damage"),
-      icon: '<i class="fa-solid fa-burst" inert></i>',
-      dataset: {
-        action: "rollDamage"
-      }
+      action: "rollDamage",
+      icon: "fa-solid fa-burst",
+      label: { value: "DND5E.Damage" }
     });
     return buttons.concat(super._usageChatButtons(message));
   }
@@ -71,7 +65,7 @@ export default class AttackActivity extends ActivityMixin(BaseAttackActivityData
 
   /** @override */
   async _triggerSubsequentActions(config, results) {
-    this.rollAttack({ event: config.event }, {}, { data: { "flags.dnd5e.originatingMessage": results.message?.id } });
+    this.rollAttack({ event: config.event }, {}, { data: { system: { origin: results.message?.id } } });
   }
 
   /* -------------------------------------------- */
@@ -86,7 +80,7 @@ export default class AttackActivity extends ActivityMixin(BaseAttackActivityData
    * @returns {Promise<D20Roll[]|null>}
    */
   async rollAttack(config={}, dialog={}, message={}) {
-    const targets = getTargetDescriptors();
+    const targets = TargetsField.getDescriptors();
 
     if ( (this.item.type === "weapon") && (this.item.system.quantity === 0) ) {
       ui.notifications.warn("DND5E.ATTACK.Warning.NoQuantity");
@@ -95,15 +89,18 @@ export default class AttackActivity extends ActivityMixin(BaseAttackActivityData
     const buildConfig = this._buildAttackConfig.bind(this);
 
     const rollConfig = foundry.utils.mergeObject({
+      ability: this.item.getFlag("dnd5e", `last.${this.id}.ability`),
       ammunition: this.item.getFlag("dnd5e", `last.${this.id}.ammunition`),
       attackMode: this.item.getFlag("dnd5e", `last.${this.id}.attackMode`),
-      elvenAccuracy: this.actor?.getFlag("dnd5e", "elvenAccuracy")
-        && CONFIG.DND5E.characterFlags.elvenAccuracy.abilities.includes(this.ability),
       halflingLucky: this.actor?.getFlag("dnd5e", "halflingLucky"),
       mastery: this.item.getFlag("dnd5e", `last.${this.id}.mastery`),
       target: targets.length === 1 ? targets[0].ac : undefined
     }, config);
 
+    const abilityOptions = this._getAbilityOptions();
+    if ( abilityOptions.length && !abilityOptions.find(a => a.value === rollConfig.ability) ) {
+      rollConfig.ability = abilityOptions[0]?.value;
+    }
     const ammunitionOptions = this.item.system.ammunitionOptions ?? [];
     if ( ammunitionOptions.length ) ammunitionOptions.unshift({ value: "", label: "" });
     if ( rollConfig.ammunition === undefined ) rollConfig.ammunition = ammunitionOptions?.[1]?.value;
@@ -119,8 +116,9 @@ export default class AttackActivity extends ActivityMixin(BaseAttackActivityData
       rollConfig.mastery = masteryOptions?.[0]?.value;
     }
 
-    const rollData = this.getRollData({ roll: { attackMode: rollConfig.attackMode } });
+    const rollData = this.getRollData({ roll: { ability: rollConfig.ability, attackMode: rollConfig.attackMode } });
     const { advantage, disadvantage } = this.actor ? D20RollModificationField.combineFields(this.actor.system, [
+      `abilities.${rollConfig.ability}.attack.roll`,
       "rolls.attack", `rolls.attack.${this.getActionType(rollConfig.attackMode)}`
     ], { rules: { category: "attack", actor: this.actor, item: this.item, rollData } }) : {};
 
@@ -139,6 +137,7 @@ export default class AttackActivity extends ActivityMixin(BaseAttackActivityData
     const dialogConfig = foundry.utils.mergeObject({
       applicationClass: AttackRollConfigurationDialog,
       options: {
+        abilityOptions,
         ammunitionOptions: rollConfig.ammunition !== false ? ammunitionOptions : [],
         attackModeOptions,
         buildConfig,
@@ -159,23 +158,18 @@ export default class AttackActivity extends ActivityMixin(BaseAttackActivityData
       create: true,
       data: {
         flavor: `${this.item.name} - ${_loc("DND5E.AttackRoll")}`,
-        flags: {
-          dnd5e: {
-            ...this.messageFlags,
-            messageType: "roll",
-            roll: { type: "attack" }
-          }
-        },
-        speaker: ChatMessage.getSpeaker({ actor: this.actor })
+        speaker: ChatMessage.getSpeaker({ actor: this.actor }),
+        system: { ...this.messageSources, targets },
+        type: "attack"
       }
     }, message);
 
     const rolls = await CONFIG.Dice.D20Roll.buildConfigure(rollConfig, dialogConfig, messageConfig);
     await CONFIG.Dice.D20Roll.buildEvaluate(rolls, rollConfig, messageConfig);
     if ( !rolls.length ) return null;
-    for ( const key of ["ammunition", "attackMode", "mastery"] ) {
-      if ( !rolls[0].options[key] ) continue;
-      foundry.utils.setProperty(messageConfig.data, `flags.dnd5e.roll.${key}`, rolls[0].options[key]);
+    const { ability, ammunition, mastery, attackMode: mode } = rolls[0].options;
+    for ( const [key, value] of Object.entries({ ability, ammunition, mastery, mode }) ) {
+      if ( value ) foundry.utils.setProperty(messageConfig.data, `system.${key}`, value);
     }
     await CONFIG.Dice.D20Roll.buildPost(rolls, rollConfig, messageConfig);
 
@@ -183,6 +177,7 @@ export default class AttackActivity extends ActivityMixin(BaseAttackActivityData
     let ammoUpdate = null;
 
     const canUpdate = this.item.isOwner && !this.item.inCompendium;
+    if ( rolls[0].options.ability ) flags.ability = rolls[0].options.ability;
     if ( rolls[0].options.ammunition ) {
       const ammo = this.actor?.items.get(rolls[0].options.ammunition);
       if ( ammo ) {
@@ -219,11 +214,11 @@ export default class AttackActivity extends ActivityMixin(BaseAttackActivityData
     // Commit ammunition consumption on attack rolls resource consumption if the attack roll was made
     if ( canUpdate && ammoUpdate?.destroy ) {
       // If ammunition was deleted, store a copy of it in the roll message
-      const data = this.actor.items.get(ammoUpdate.id).toObject();
-      const messageId = messageConfig.data?.flags?.dnd5e?.originatingMessage
+      const deleted = [this.actor.items.get(ammoUpdate.id).toObject()];
+      const messageId = messageConfig.data?.system?.origin
         ?? rollConfig.event?.target.closest("[data-message-id]")?.dataset.messageId;
       const attackMessage = dnd5e.registry.messages.get(messageId, "attack")?.pop();
-      await attackMessage?.setFlag("dnd5e", "roll.ammunitionData", data);
+      await attackMessage?.update({ "system.deltas": { deleted } });
       await this.actor.deleteEmbeddedDocuments("Item", [ammoUpdate.id]);
     }
     else if ( canUpdate && ammoUpdate ) await this.actor?.updateEmbeddedDocuments("Item", [
@@ -254,15 +249,23 @@ export default class AttackActivity extends ActivityMixin(BaseAttackActivityData
    * @param {number} index                                 Index of the roll within all rolls being prepared.
    */
   _buildAttackConfig(process, config, formData, index) {
+    const ability = formData?.get("ability") ?? process.ability;
     const ammunition = formData?.get("ammunition") ?? process.ammunition;
     const attackMode = formData?.get("attackMode") ?? process.attackMode;
     const mastery = formData?.get("mastery") ?? process.mastery;
 
-    let { parts, data } = this.getAttackData({ ammunition, attackMode });
+    let { parts, data } = this.getAttackData({ ability, ammunition, attackMode });
     const { maximum, minimum } = this.actor ? D20RollModificationField.combineFields(this.actor.system, [
+      `abilities.${ability}.attack.roll`,
       "rolls.attack", `rolls.attack.${this.getActionType(attackMode)}`
     ], { rules: { category: "attack", actor: this.actor, item: this.item, rollData: data } }) : {};
-    const options = CONFIG.Dice.D20Roll.mergeOptions({ maximum, minimum }, config.options);
+    const options = CONFIG.Dice.D20Roll.mergeOptions({
+      elvenAccuracy: this.actor?.getFlag("dnd5e", "elvenAccuracy")
+        && CONFIG.DND5E.characterFlags.elvenAccuracy.abilities.includes(ability),
+      maximum,
+      minimum
+    }, config.options);
+    if ( ability !== undefined ) options.ability = ability;
     if ( ammunition !== undefined ) options.ammunition = ammunition;
     if ( attackMode !== undefined ) options.attackMode = attackMode;
     if ( mastery !== undefined ) options.mastery = mastery;
@@ -298,27 +301,33 @@ export default class AttackActivity extends ActivityMixin(BaseAttackActivityData
    */
   static #rollDamage(event, target, message) {
     const lastAttack = message.getAssociatedRolls("attack").pop();
-    const attackMode = lastAttack?.getFlag("dnd5e", "roll.attackMode");
-
-    // Fetch the ammunition used with the last attack roll
-    let ammunition;
-    const actor = lastAttack?.getAssociatedActor();
-    if ( actor ) {
-      const storedData = lastAttack.getFlag("dnd5e", "roll.ammunitionData");
-      ammunition = storedData
-        ? new Item.implementation(storedData, { parent: actor })
-        : actor.items.get(lastAttack.getFlag("dnd5e", "roll.ammunition"));
-    }
-
+    const { ability, ammunitionItem: ammunition, mode: attackMode } = lastAttack?.system ?? {};
     const isCritical = lastAttack?.rolls[0]?.isCritical;
     const dialogConfig = {};
     if ( isCritical ) dialogConfig.options = { defaultButton: "critical" };
 
-    this.rollDamage({ event, ammunition, attackMode, isCritical }, dialogConfig);
+    this.rollDamage({ event, ability, ammunition, attackMode, isCritical }, dialogConfig);
   }
 
   /* -------------------------------------------- */
   /*  Helpers                                     */
+  /* -------------------------------------------- */
+
+  /**
+   * Prepare ability options for this attack.
+   * @returns {FormSelectOption[]}
+   * @protected
+   */
+  _getAbilityOptions() {
+    const actorAbilities = this.actor?.system.abilities ?? {};
+    const options = Array.from(this.attack.abilities)
+      .filter(ability => ability in CONFIG.DND5E.abilities)
+      .sort((a, b) => (actorAbilities[b]?.mod ?? 0) - (actorAbilities[a]?.mod ?? 0))
+      .map(value => ({ value, label: CONFIG.DND5E.abilities[value].label }));
+    if ( this.attack.ability === "none" ) options.push({ value: "none", label: _loc("DND5E.None") });
+    return options;
+  }
+
   /* -------------------------------------------- */
 
   /** @inheritDoc */

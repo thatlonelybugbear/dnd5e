@@ -1,32 +1,51 @@
-import ChatMessageDataModel from "../abstract/chat-message-data-model.mjs";
+import ItemMessageData from "./item-message-data.mjs";
 import { ActorDeltasField } from "./fields/deltas-field.mjs";
+import SourceReferenceField from "./fields/source-reference-field.mjs";
 
-const { ArrayField, DocumentIdField, NumberField, StringField } = foundry.data.fields;
+const {
+  ArrayField, BooleanField, DocumentIdField, HTMLField, NumberField, ObjectField, SchemaField, StringField
+} = foundry.data.fields;
 
 /**
+ * @import { ActivityUsageChatButton } from "../../documents/activity/_types.mjs";
  * @import { UsageMessageSystemData } from "./_types.mjs";
  */
 
 /**
  * Data stored in a usage chat message.
- * @extends {ChatMessageDataModel<UsageMessageSystemData>}
+ * @extends {ItemMessageData<UsageMessageSystemData>}
  * @mixes UsageMessageSystemData
  */
-export default class UsageMessageData extends ChatMessageDataModel {
+export default class UsageMessageData extends ItemMessageData {
 
   /* -------------------------------------------- */
   /*  Model Configuration                         */
   /* -------------------------------------------- */
 
-  /** @override */
+  /** @inheritDoc */
   static defineSchema() {
     return {
+      ...super.defineSchema(),
+      activity: new SourceReferenceField({
+        chatFlavor: new HTMLField(),
+        uuid: new StringField({ blank: false, nullable: true, required: true })
+      }),
+      buttons: new ArrayField(new SchemaField({
+        action: new StringField({ blank: false, required: true }),
+        canGroup: new BooleanField(),
+        dataset: new ObjectField(),
+        icon: new StringField(),
+        label: new SchemaField({
+          hidden: new StringField(),
+          value: new StringField()
+        }),
+        visibility: new StringField({ choices: ["all", "creator", "gm"], initial: "creator", required: true })
+      })),
       cause: new StringField(), // TODO: Replace with DocumentUUIDField with `relative: true` in DnD5e 6.0
       concentration: new DocumentIdField({ required: false }),
       deltas: new ActorDeltasField({}, { initial: null, nullable: true }),
       effects: new ArrayField(new StringField({ blank: false })),
-      scaling: new NumberField({ integer: true, min: 0, initial: 0 }),
-      spellLevel: new NumberField({ integer: true, min: 0 })
+      scaling: new NumberField({ integer: true, min: 0, initial: 0 })
     };
   }
 
@@ -42,16 +61,6 @@ export default class UsageMessageData extends ChatMessageDataModel {
   /* -------------------------------------------- */
 
   /**
-   * The activity for the chat message.
-   * @type {Activity}
-   */
-  get activity() {
-    return this.parent.getAssociatedActivity();
-  }
-
-  /* -------------------------------------------- */
-
-  /**
    * The actor for the chat message.
    * @type {Actor5e}
    */
@@ -61,12 +70,9 @@ export default class UsageMessageData extends ChatMessageDataModel {
 
   /* -------------------------------------------- */
 
-  /**
-   * The item for the chat message.
-   * @type {Item5e}
-   */
-  get item() {
-    return this.parent.getAssociatedItem();
+  /** @inheritDoc */
+  get showIdentity() {
+    return !!this.activity.name;
   }
 
   /* -------------------------------------------- */
@@ -74,14 +80,95 @@ export default class UsageMessageData extends ChatMessageDataModel {
   /* -------------------------------------------- */
 
   /** @override */
-  async _prepareContext() {
-    return {
-      content: await foundry.applications.ux.TextEditor.implementation.enrichHTML(
-        this.parent.content, { rollData: this.parent.getRollData() }
-      ),
-      effects: (await Promise.all(this.effects.map(uuid => fromUuid(uuid, { relative: this.item }))))
-        .filter(e => e && (game.user.isGM || (e.transfer & (this.parent.author?.id === game.user.id))))
+  _getButtonGroupContextOptions() {
+    const { forwardAction } = ui.context.target.dataset;
+    const activity = this.parent.getAssociatedActivity();
+    if ( typeof activity?.onChatAction !== "function" ) return [];
+    return this._prepareButtons()
+      .filter(b => b.canGroup && !b.hidden && (b.action === forwardAction))
+      .map(({ icon, index, label }) => ({
+        icon, label,
+        onClick: (event, group) => {
+          group.dataset.index = index;
+          return activity.onChatAction(event, group, this.parent);
+        }
+      }));
+  }
+
+  /* -------------------------------------------- */
+
+  /** @inheritDoc */
+  async _prepareContext(options) {
+    let context;
+    if ( this.parent.content ) context = {
+      content: await foundry.applications.ux.TextEditor.implementation.enrichHTML(this.parent.content, {
+        rollData: this.parent.getRollData()
+      })
     };
+    else {
+      context = await super._prepareContext(options);
+      context.activity = this.activity;
+      context.buttons = this._prepareButtons();
+      this._prepareButtonGroups(context);
+      if ( this.activity.name ) context.subtitle = this.activity.name;
+    }
+
+    const item = this.parent.getAssociatedItem();
+    context.effects = (await Promise.all(this.effects.map(uuid => fromUuid(uuid, { relative: item }))))
+      .filter(e => e && (game.user.isGM || (e.transfer & (this.parent.author?.id === game.user.id))));
+    return context;
+  }
+
+  /* -------------------------------------------- */
+
+  /**
+   * Render context for the buttons offered by the activity, with their visibility resolved for the viewing user.
+   * @returns {object[]}
+   * @protected
+   */
+  _prepareButtons() {
+    const activity = this.parent.getAssociatedActivity();
+    const isCreator = game.user.isGM || this.actor?.isOwner || this.parent.isAuthor;
+    return this.buttons.map((button, index) => {
+      const { action, visibility } = button;
+      let hidden = visibility !== "all";
+      if ( hidden ) {
+        hidden = (visibility === "gm") && !game.user.isGM;
+        hidden ||= !isCreator || activity?.shouldHideChatButton(button, this.parent);
+      }
+      const label = this.parent.shouldDisplayChallenge
+        ? button.label.value
+        : (button.label.hidden || button.label.value);
+      return { ...button, hidden, index, label, dataset: { ...button.dataset, /** @deprecated */ action } };
+    });
+  }
+
+  /* -------------------------------------------- */
+
+  /**
+   * Prepare render context for button groups.
+   * @param {object} context  Render context.
+   * @protected
+   */
+  _prepareButtonGroups(context) {
+    context.buttonGroups = context.buttons.reduce((obj, button) => {
+      const { action, canGroup, hidden, icon, label } = button;
+      if ( hidden ) return obj;
+      obj[action] ??= { icon, entries: [] };
+      if ( canGroup ) {
+        context.rows[action] ??= { icon, entries: [], label: `DND5E.CHATMESSAGE.Row.${action}` };
+        context.rows[action].entries.push(label);
+        if ( obj[action].entries.length ) {
+          obj[action].entries[0].singleton = false;
+          return obj;
+        }
+        obj[action].entries.push({ ...button, label: `DND5E.CHATMESSAGE.Button.${action}`, singleton: true });
+      } else {
+        obj[action].entries.push(button);
+      }
+      return obj;
+    }, {});
+    if ( foundry.utils.isEmpty(context.buttonGroups) ) delete context.buttonGroups;
   }
 
   /* -------------------------------------------- */
@@ -89,31 +176,61 @@ export default class UsageMessageData extends ChatMessageDataModel {
   /** @inheritDoc */
   _onRender(element) {
     super._onRender(element);
-    this.activity?.onRenderChatCard(this.parent, element);
-    this._displayChatActionButtons(element);
-    if ( game.settings.get("dnd5e", "autoCollapseItemCards") ) {
-      element.querySelectorAll(".description.collapsible").forEach(el => el.classList.add("collapsed"));
-    }
-    this.activity?.activateChatListeners(this.parent, element);
+    if ( this.parent.shouldDisplayChallenge ) element.dataset.displayChallenge = "";
+    const activity = this.parent.getAssociatedActivity();
+    activity?.onRenderChatCard(this.parent, element);
+    activity?._activateLegacyChatListeners(this.parent, element);
   }
 
   /* -------------------------------------------- */
+  /*  Event Listeners & Handlers                  */
+  /* -------------------------------------------- */
+
+  /** @inheritDoc */
+  _onClickAction(event, target) {
+    if ( event.button !== 0 ) return;
+    this.parent.getAssociatedActivity()?.onChatAction(event, target, this.parent);
+  }
+
+  /* -------------------------------------------- */
+  /*  Helpers                                     */
+  /* -------------------------------------------- */
 
   /**
-   * Control visibility of chat card action buttons based on viewing user.
-   * @param {HTMLElement} element  Rendered contents of the message.
-   * @protected
+   * Retrieve the descriptor for the button that was clicked.
+   * @param {HTMLElement} target  Button that was clicked.
+   * @returns {ActivityUsageChatButton|void}
    */
-  _displayChatActionButtons(element) {
-    if ( this.parent.shouldDisplayChallenge ) element.dataset.displayChallenge = "";
+  getButton(target) {
+    return this.buttons[Number(target.dataset.index)];
+  }
 
-    const isCreator = game.user.isGM || this.actor?.isOwner || this.parent.isAuthor;
-    for ( const button of element.querySelectorAll(".card-buttons button") ) {
-      if ( button.dataset.visibility === "all" ) continue;
+  /* -------------------------------------------- */
+  /*  Data Migration                              */
+  /* -------------------------------------------- */
 
-      // GM buttons should only be visible to GMs, otherwise button should only be visible to message's creator
-      if ( ((button.dataset.visibility === "gm") && !game.user.isGM) || !isCreator
-        || this.activity?.shouldHideChatButton(button, this.parent) ) button.hidden = true;
+  /** @inheritDoc */
+  static migrateData(source) {
+    super.migrateData(source);
+    if ( "spellLevel" in source ) {
+      source.level = source.spellLevel;
+      delete source.spellLevel;
     }
+    return source;
+  }
+
+  /* -------------------------------------------- */
+  /*  Deprecations                                */
+  /* -------------------------------------------- */
+
+  /**
+   * @ignore
+   * @deprecated
+   * @since 6.0.0
+   */
+  get spellLevel() {
+    foundry.utils.logCompatibilityWarning("UsageMessageData#spellLevel is deprecated. "
+      + "Please use the 'level' property instead.", { since: "DnD5e 6.0", until: "DnD5e 6.2" });
+    return this.level;
   }
 }

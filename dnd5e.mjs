@@ -477,6 +477,14 @@ Hooks.once("setup", function() {
     }
   `;
   document.head.append(style);
+
+  // Measure the space a scrollbar takes up so that sheets can center theirs within their padding.
+  const probe = document.createElement("div");
+  probe.style.cssText = "position: absolute; visibility: hidden; overflow-y: auto; scrollbar-gutter: stable; "
+    + "scrollbar-width: thin; inline-size: 100px; block-size: 100px";
+  document.body.append(probe);
+  document.documentElement.style.setProperty("--dnd5e-scrollbar-width", `${probe.offsetWidth - probe.clientWidth}px`);
+  probe.remove();
 });
 
 /* --------------------------------------------- */
@@ -627,7 +635,9 @@ Hooks.on("renderSettings", (app, html) => applications.settings.sidebar.renderSe
 
 Hooks.on("applyCompendiumArt", (documentClass, ...args) => documentClass.applyCompendiumArt?.(...args));
 
+Hooks.on("renderChatInput", () => applications.ChatLog5e.applyTheme());
 Hooks.on("renderChatPopout", documents.ChatMessage5e.onRenderChatPopout);
+Hooks.on("renderChatPopout", () => applications.ChatLog5e.applyTheme());
 Hooks.on("getChatMessageContextOptions", documents.ChatMessage5e.addChatMessageContextOptions);
 
 Hooks.on("renderChatLog", (app, html, data) => {

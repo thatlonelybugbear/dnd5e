@@ -26,6 +26,8 @@
 },
 
 "TYPES.ChatMessage": {
+  "item": "Item Message",
+  "prompt": "Prompt Message",
   "request": "Request Message",
   "rest": "Rest Message",
   "timePassed": "Time Passed Message",
@@ -90,6 +92,7 @@
 
 "DND5E.ABILITY": {
   "Configure": {
+    "AttackLabel": "{ability} Attack",
     "CheckLabel": "{ability} Check",
     "SaveLabel": "{ability} Save",
     "Title": "Configure {ability}"
@@ -97,6 +100,14 @@
   "FIELDS": {
     "abilities": {
       "element": {
+        "attack": {
+          "roll": {
+            "bonus": { "label": "Attack Bonus" },
+            "max": { "label": "Maximum Attack Roll" },
+            "min": { "label": "Minimum Attack Roll" },
+            "mode": { "label": "Attack Advantage Mode" }
+          }
+        },
         "check": {
           "roll": {
             "bonus": { "label": "Check Bonus" },
@@ -117,6 +128,12 @@
     }
   },
   "Formatter": {
+    "Attack": {
+      "AdvantageMode": "{name} Attack Advantage Mode",
+      "Bonus": "{name} Attack Bonus",
+      "Maximum": "Maximum {name} Attack Roll",
+      "Minimum": "Minimum {name} Attack Roll"
+    },
     "Check": {
       "AdvantageMode": "{name} Check Advantage Mode",
       "Bonus": "{name} Check Bonus",
@@ -136,11 +153,11 @@
   "SECTIONS": {
     "Bonuses": {
       "Label": "{ability} Bonuses",
-      "Hint": "These bonuses apply to checks & saves made with {ability}."
+      "Hint": "These bonuses apply to attacks, checks, and saves made with {ability}."
     },
     "Global": {
       "Label": "Global Bonuses",
-      "Hint": "These bonuses apply to checks & saves made with any ability."
+      "Hint": "These bonuses apply to checks and saves made with any ability."
     },
     "Score": "{ability} Score"
   }
@@ -1149,6 +1166,9 @@
   "FIELDS": {
     "attack": {
       "label": "Attack Details",
+      "abilities": {
+        "label": "Ability Options"
+      },
       "ability": {
         "label": "Attack Ability",
         "hint": "Ability used for make the attack and determine damage. Available using @mod in formulas."
@@ -1729,6 +1749,13 @@
 
 "DND5E.CHATMESSAGE": {
   "Activities": "Activities",
+  "Button": {
+    "rollAttack": "Attack",
+    "rollCheck": "Ability Check",
+    "rollDamage": "Damage",
+    "rollFormula": "Roll",
+    "rollSave": "Saving Throw"
+  },
   "Deltas": {
     "Created": "Item Created",
     "Deleted": "Item Deleted",
@@ -1743,6 +1770,12 @@
     "Complete": "Request Fulfilled",
     "PartyMembers": "Party Members",
     "Title": "Request"
+  },
+  "Row": {
+    "Actions": "Item actions",
+    "Properties": "Item properties",
+    "rollCheck": "Ability checks",
+    "rollSave": "Saving throws"
   },
   "TURN": {
     "NoCombatant": "Combatant no longer exists!"
@@ -1954,7 +1987,10 @@
     "End": "End Concentration"
   },
   "Description": "You are maintaining concentration on the effects of the '{name}' {type}.",
-  "Duration": "Concentration, up to {duration}",
+  "Duration": {
+    "Scalar": "Concentration, up to {duration}",
+    "Special": "Concentration, {durationLc}"
+  },
   "EndChoice": "You are concentrating on effects from more than one source. Pick which effect to end.",
   "FIELDS": {
     "attributes": {
@@ -2488,16 +2524,13 @@
 "DND5E.Day": "Day",
 "DND5E.DeathSave": "Death Saves",
 "DND5E.DeathSaveConfigure": "Configure Death Saves",
-"DND5E.DeathSaveCriticalSuccess": "{name} critically succeeded on a death saving throw and has regained 1 Hit Point!",
 "DND5E.DeathSaveHide": "Hide Death Saves",
 "DND5E.DeathSaveShow": "Show Death Saves",
-"DND5E.DeathSaveSuccess": "{name} has survived with 3 death save successes and is now stable!",
 "DND5E.DeathSaveSuccessLabel": "Death Save Success",
 "DND5E.DeathSaveSuccessLabelN.one": "1st death save success",
 "DND5E.DeathSaveSuccessLabelN.two": "2nd death save success",
 "DND5E.DeathSaveSuccessLabelN.few": "3rd death save success",
 "DND5E.DeathSaveSuccesses": "Successes",
-"DND5E.DeathSaveFailure": "{name} has died with 3 death save failures!",
 "DND5E.DeathSaveFailureLabel": "Death Save Failure",
 "DND5E.DeathSaveFailureLabelN.one": "1st death save failure",
 "DND5E.DeathSaveFailureLabelN.two": "2nd death save failure",
@@ -2519,6 +2552,11 @@
         }
       }
     }
+  },
+  "Outcome": {
+    "death": "{name} has died with 3 death save failures!",
+    "revive": "{name} critically succeeded on a death saving throw and has regained 1 Hit Point!",
+    "stable": "{name} has survived with 3 death save successes and is now stable!"
   }
 },
 
@@ -2596,9 +2634,11 @@
     "CreateEffect": "Create Effect",
     "DeleteEffect": "Delete Effect",
     "DeleteChange": "Delete Change",
+    "DisableEffect": "Disable Effect",
     "DissociateEffect": "Dissociate Effect",
     "EditChange": "Edit Change",
     "EditEffect": "Edit Effect",
+    "EnableEffect": "Enable Effect",
     "RemoveStatus": {
       "all": "All Sources",
       "label": "Source"
@@ -2972,6 +3012,7 @@
       "Label": "Purchase Base Item",
       "Hint": "If checked, the base item will be purchased at full price instead of crafted."
     },
+    "DropHint": "Drop an Item here",
     "Hint": "The items that this facility is currently in the process of crafting or harvesting, if any."
   },
   "Description": "Description",
@@ -3122,11 +3163,11 @@
       "Supplement": "Buy"
     },
     "Creatures": {
-      "Buy": "Drop animals that you wish to purchase into the slots above, and update the cost appropriately below."
+      "Buy": "Drop animals that you wish to purchase into the slots above. The cost is calculated from their individual prices, and can be adjusted below."
     },
     "Price": {
       "Label": "Base Price",
-      "Hint": "Select which stock to sell, and input the base price above."
+      "Hint": "Select which stock to sell. The base price is calculated from their individual prices, and can be adjusted above."
     },
     "Sell": {
       "Label": "Sell Stock",
@@ -3138,7 +3179,8 @@
     },
     "Stocked": {
       "Label": "Fully Stock",
-      "Hint": "Input the required cost to fully stock this facility below."
+      "Hint": "Input the required cost to fully stock this facility below.",
+      "Supplement": "Fully stocked"
     }
   },
   "Types": {
@@ -4331,6 +4373,9 @@
       "mode": "Attack Mode",
       "type": "Attack Type"
     },
+    "damage": {
+      "type": "Damage Type"
+    },
     "proficient": "Proficient",
     "skill": "Rolled Skill",
     "tool": "Rolled Tool",
@@ -5270,8 +5315,8 @@
         "any": "any allies",
         "each": "each ally",
         "every": "every ally",
-        "one": "{number} ally",
-        "other": "{number} allies"
+        "one": "ally",
+        "other": "allies"
       }
     },
     "Any": {
@@ -5280,8 +5325,8 @@
     "Circle": {
       "Label": "Circle",
       "Counted": {
-        "one": "{number} circle",
-        "other": "{number} circles",
+        "one": "circle",
+        "other": "circles",
         "oneSized": "{sizes} Circle",
         "otherSized": "{number} {sizes} Circles"
       }
@@ -5289,8 +5334,8 @@
     "Cone": {
       "Label": "Cone",
       "Counted": {
-        "one": "{number} cone",
-        "other": "{number} cones",
+        "one": "cone",
+        "other": "cones",
         "oneSized": "{sizes} Cone",
         "otherSized": "{number} {sizes} Cones"
       }
@@ -5301,8 +5346,8 @@
         "any": "any creatures",
         "each": "each creature",
         "every": "every creature",
-        "one": "{number} creature",
-        "other": "{number} creatures"
+        "one": "creature",
+        "other": "creatures"
       }
     },
     "CreatureOrObject": {
@@ -5311,15 +5356,15 @@
         "any": "any creatures or objects",
         "each": "each creature or object",
         "every": "every creature or object",
-        "one": "{number} creature or object",
-        "other": "{number} creatures or objects"
+        "one": "creature or object",
+        "other": "creatures or objects"
       }
     },
     "Cube": {
       "Label": "Cube",
       "Counted": {
-        "one": "{number} cube",
-        "other": "{number} cubes",
+        "one": "cube",
+        "other": "cubes",
         "oneSized": "{sizes} Cube",
         "otherSized": "{number} {sizes} Cubes"
       }
@@ -5327,8 +5372,8 @@
     "Cylinder": {
       "Label": "Cylinder",
       "Counted": {
-        "one": "{number} cylinder",
-        "other": "{number} cylinders",
+        "one": "cylinder",
+        "other": "cylinders",
         "oneSized": "{sizes} Cylinder",
         "otherSized": "{number} {sizes} Cylinders"
       }
@@ -5336,8 +5381,8 @@
     "Emanation": {
       "Label": "Emanation",
       "Counted": {
-        "one": "{number} emanation",
-        "other": "{number} emanations",
+        "one": "emanation",
+        "other": "emanations",
         "oneSized": "{sizes} Emanation",
         "otherSized": "{number} {sizes} Emanations"
       }
@@ -5348,15 +5393,15 @@
         "any": "any enemies",
         "each": "each enemy",
         "every": "every enemy",
-        "one": "{number} enemy",
-        "other": "{number} enemies"
+        "one": "enemy",
+        "other": "enemies"
       }
     },
     "Line": {
       "Label": "Line",
       "Counted": {
-        "one": "{number} line",
-        "other": "{number} lines",
+        "one": "line",
+        "other": "lines",
         "oneSized": "{sizes} Line",
         "otherSized": "{number} {sizes} Lines"
       }
@@ -5367,15 +5412,15 @@
         "any": "any objects",
         "each": "each object",
         "every": "every object",
-        "one": "{number} object",
-        "other": "{number} objects"
+        "one": "object",
+        "other": "objects"
       }
     },
     "Radius": {
       "Label": "Radius",
       "Counted": {
-        "one": "{number} radius",
-        "other": "{number} radii",
+        "one": "radius",
+        "other": "radii",
         "oneSized": "{sizes} Radius",
         "otherSized": "{number} {sizes} Radii"
       }
@@ -5383,8 +5428,8 @@
     "Ring": {
       "Label": "Ring",
       "Counted": {
-        "one": "{number} ring",
-        "other": "{number} rings",
+        "one": "ring",
+        "other": "rings",
         "oneSized": "{sizes} Ring",
         "otherSized": "{number} {sizes} Rings"
       }
@@ -5398,15 +5443,15 @@
         "any": "any spaces",
         "each": "each space",
         "every": "every space",
-        "one": "{number} Space",
-        "other": "{number} Spaces"
+        "one": "space",
+        "other": "spaces"
       }
     },
     "Sphere": {
       "Label": "Sphere",
       "Counted": {
-        "one": "{number} sphere",
-        "other": "{number} spheres",
+        "one": "sphere",
+        "other": "spheres",
         "oneSized": "{sizes} Sphere",
         "otherSized": "{number} {sizes} Spheres"
       }
@@ -5417,15 +5462,15 @@
         "any": "any {special}",
         "each": "each {special}",
         "every": "every {special}",
-        "one": "{number} {special}",
-        "other": "{number} {special}"
+        "one": "{special}",
+        "other": "{special}"
       }
     },
     "Square": {
       "Label": "Square",
       "Counted": {
-        "one": "{number} square",
-        "other": "{number} squares",
+        "one": "square",
+        "other": "squares",
         "oneSized": "{sizes} Square",
         "otherSized": "{number} {sizes} Squares"
       }
@@ -5436,15 +5481,15 @@
         "any": "any targets",
         "each": "each target",
         "every": "every target",
-        "one": "{number} target",
-        "other": "{number} targets"
+        "one": "target",
+        "other": "targets"
       }
     },
     "Wall": {
       "Label": "Wall",
       "Counted": {
-        "one": "{number} wall",
-        "other": "{number} walls",
+        "one": "wall",
+        "other": "walls",
         "oneSized": "{sizes} Wall",
         "otherSized": "{number} {sizes} Walls"
       }
@@ -5455,8 +5500,8 @@
         "any": "any willing creatures",
         "each": "each willing creature",
         "every": "every willing creature",
-        "one": "{number} willing creature",
-        "other": "{number} willing creatures"
+        "one": "willing creature",
+        "other": "willing creatures"
       }
     }
   },
@@ -6741,6 +6786,15 @@
     "Player": "Only Display for Friendly Tokens",
     "None": "Never Display"
   },
+  "CHATLOG": {
+    "Hint": "Specify a theme for the chat log. By default this will inherit from the Application theme.",
+    "Name": "Chat Log",
+    "Options": {
+      "blank": "Default",
+      "dark": "Dark",
+      "light": "Light"
+    }
+  },
   "COLLAPSETRAYS": {
     "Name": "Collapse Trays in Chat",
     "Hint": "Automatically collapse damage, hit, and effect trays that appear in chat cards.",
@@ -6849,10 +6903,6 @@
     "Hint": "Enable optional Piety tracking for player characters.",
     "Name": "Piety Score"
   },
-  "THEME": {
-    "Name": "Theme",
-    "Hint": "Theme that will apply to the UI and all sheets by default. Automatic will be determined by your browser or operating system settings."
-  },
   "PERMISSIONS": {
     "AllowRests": {
       "Hint": "Allow players to rest directly from their characters' sheets. When disabled, players will only be able to rest when the GM makes a request from the party.",
@@ -6943,15 +6993,6 @@
       "Hint": "Hide the descriptions of NPC items from players when posted to chat by the DM. Will only hide the descriptions for items without a Chat Description set.",
       "Name": "Conceal NPC Descriptions"
     }
-  }
-},
-
-"SHEETS.DND5E": {
-  "THEME": {
-    "Label": "Theme",
-    "Automatic": "Automatic",
-    "Dark": "Dark Mode",
-    "Light": "Light Mode"
   }
 },
 

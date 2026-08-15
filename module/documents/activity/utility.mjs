@@ -1,5 +1,6 @@
 import UtilitySheet from "../../applications/activity/utility-sheet.mjs";
 import BaseUtilityActivityData from "../../data/activity/utility-data.mjs";
+import TargetsField from "../../data/chat-message/fields/targets-field.mjs";
 import ActivityMixin from "./mixin.mjs";
 
 /**
@@ -44,14 +45,13 @@ export default class UtilityActivity extends ActivityMixin(BaseUtilityActivityDa
   /** @override */
   _usageChatButtons(message) {
     if ( !this.roll.formula ) return super._usageChatButtons(message);
-    return [{
-      label: this.roll.name || _loc("DND5E.Roll"),
-      icon: '<i class="fa-solid fa-dice" inert></i>',
-      dataset: {
-        action: "rollFormula",
-        visibility: this.roll.visible ? "all" : undefined
-      }
-    }].concat(super._usageChatButtons(message));
+    const button = {
+      action: "rollFormula",
+      icon: "fa-solid fa-dice",
+      label: { value: this.roll.name || "DND5E.Roll" }
+    };
+    if ( this.roll.visible ) button.visibility = "all";
+    return [button, ...super._usageChatButtons(message)];
   }
 
   /* -------------------------------------------- */
@@ -91,13 +91,8 @@ export default class UtilityActivity extends ActivityMixin(BaseUtilityActivityDa
       create: true,
       data: {
         flavor: `${this.item.name} - ${this.roll.label || _loc("DND5E.OtherFormula")}`,
-        flags: {
-          dnd5e: {
-            ...this.messageFlags,
-            messageType: "roll",
-            roll: { type: "generic" }
-          }
-        }
+        type: "generic",
+        system: { ...this.messageSources, targets: TargetsField.getDescriptors() }
       }
     }, message);
 

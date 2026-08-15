@@ -1,5 +1,6 @@
 import RollConfigurationDialog from "../applications/dice/roll-configuration-dialog.mjs";
 import BasicDie from "./basic-die.mjs";
+import simplifyRollFormula from "./simplify-roll-formula.mjs";
 
 const { DiceTerm, NumericTerm, PoolTerm } = foundry.dice.terms;
 
@@ -121,8 +122,8 @@ export default class BasicRoll extends Roll {
     }
 
     // Store the roll type in roll.options so it can be accessed from only the roll
-    const rollType = foundry.utils.getProperty(message, "data.flags.dnd5e.roll.type");
-    if ( rollType ) rolls.forEach(roll => roll.options.rollType ??= rollType);
+    const rollType = foundry.utils.getProperty(message, "data.type");
+    if ( rollType && (rollType !== "base") ) rolls.forEach(roll => roll.options.rollType ??= rollType);
 
     /**
      * A hook event that fires after roll configuration is complete, but before the roll is evaluated.
@@ -171,13 +172,13 @@ export default class BasicRoll extends Roll {
   static async buildPost(rolls, config, message) {
     message.data = foundry.utils.expandObject(message.data ?? {});
     const messageId = config.event?.target?.closest("[data-message-id]")?.dataset.messageId;
-    if ( messageId ) foundry.utils.setProperty(message.data, "flags.dnd5e.originatingMessage", messageId);
+    if ( messageId ) foundry.utils.setProperty(message.data, "system.origin", messageId);
 
-    // Attack & Damage store originatingMessage directly on message.data and do not have a config.event. We retrieve
+    // Attack & Damage store their origin directly on message.data and do not have a config.event. We retrieve
     // those here.
-    const originatingMessage = foundry.utils.getProperty(message.data, "flags.dnd5e.originatingMessage");
+    const origin = foundry.utils.getProperty(message.data, "system.origin");
     // Store in roll options so that it can be serialized.
-    if ( originatingMessage ) rolls?.forEach(r => r.options.originatingMessage ??= originatingMessage);
+    if ( origin ) rolls?.forEach(r => r.options.originatingMessage ??= origin);
 
     if ( rolls?.length && (config.evaluate !== false) ) {
       message[message.create !== false ? "document" : "data"] = await this.toMessage(
@@ -287,6 +288,17 @@ export default class BasicRoll extends Roll {
    * @protected
    */
   static _prepareMessageData(rolls, messageData) {}
+
+  /* -------------------------------------------- */
+
+  /** @inheritDoc */
+  async getTooltip() {
+    const constant = Number(simplifyRollFormula(this._formula, { deterministic: true }));
+    return foundry.applications.handlebars.renderTemplate(this.constructor.TOOLTIP_TEMPLATE, {
+      constant: constant || null,
+      parts: this.dice.map(d => d.getTooltipData())
+    });
+  }
 
   /* -------------------------------------------- */
   /*  Evaluate Methods                            */
