@@ -1,4 +1,5 @@
 import * as Trait from "../../documents/actor/trait.mjs";
+import { convertCurrency, roundCurrency } from "../../utils.mjs";
 import PropertyField from "../shared/property-field.mjs";
 import SystemDataModel from "./system-data-model.mjs";
 
@@ -330,7 +331,13 @@ export default class ItemDataModel extends SystemDataModel {
     if ( !this.properties.has("mgc") || !rarities.size ) {
       const { mundane } = CONFIG.DND5E.crafting;
       const valueInGP = price.valueInGP ?? 0;
-      return { days: Math.ceil(valueInGP * mundane.days), gold: Math.floor(valueInGP * mundane.gold) };
+      const gold = convertCurrency(roundCurrency(price.value * mundane.gold, price.denomination), price.denomination, {
+        to: CONFIG.DND5E.defaultCurrency
+      });
+      return {
+        days: Math.ceil(valueInGP * mundane.days),
+        gold: gold.denomination === CONFIG.DND5E.defaultCurrency ? gold.value : 0
+      };
     }
 
     // Exceptions

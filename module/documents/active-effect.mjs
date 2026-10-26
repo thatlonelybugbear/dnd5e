@@ -21,7 +21,7 @@ const ATTACK_ABILITY_SHIM_REGEX = new RegExp(/system\.activities\.\w+\.attack\.a
 /**
  * Extend the base ActiveEffect class to implement system-specific logic.
  */
-export default class ActiveEffect5e extends DependentDocumentMixin(ActiveEffect) {
+export default class ActiveEffect5e extends DependentDocumentMixin(foundry.documents.ActiveEffect) {
 
   /**
    * The default icon used for newly created Active Effect documents.
@@ -427,7 +427,7 @@ export default class ActiveEffect5e extends DependentDocumentMixin(ActiveEffect)
       try {
         delta = simplifyBonus(field._replaceDataRefs(delta, replacementData), {}, { strict: true });
         limit = simplifyBonus(field._replaceDataRefs(limit, replacementData), {}, { strict: true });
-      } catch (err) {
+      } catch ( err ) {
         const warningHeader = change.effect ? `Active Effect (${change.effect.uuid}) | ` : "";
         console.warn(`${warningHeader} "${change.type}" change to ${change.key} failed to resolve: ${err.message}`);
         return current;
@@ -730,9 +730,10 @@ export default class ActiveEffect5e extends DependentDocumentMixin(ActiveEffect)
   toDragData() {
     const data = super.toDragData();
     const activity = this.item?.system.activities?.getByType("enchant").find(a => {
-      return a.effects.some(e => e._id === this.id);
+      return !a.isHidden && a.effects.some(e => e._id === this.id);
     });
     if ( activity ) data.activityId = activity.id;
+    data.effectType = this.type;
     return data;
   }
 
@@ -1264,9 +1265,11 @@ export default class ActiveEffect5e extends DependentDocumentMixin(ActiveEffect)
     const context = {
       ...change,
       typeLabel: _loc(ActiveEffect.CHANGE_TYPES[change.type]?.label),
-      value: foundry.utils.isPlainObject(change.value) ? JSON.stringify(change.value, null, 2) : change.value,
+      value: foundry.utils.isPlainObject(change.value) || Array.isArray(change.value)
+        ? JSON.stringify(change.value, null, 2) : change.value,
       ...((await this.system.getSheetChangeContext?.(change)) ?? {})
     };
+    context.showValue = context.value !== undefined;
     context.name ||= change.key;
     return context;
   }
